@@ -14,22 +14,28 @@ const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY;
 
 let memory = [];
 
+const systemPrompt = {
+  role: "system",
+  content: "You are a helpful AI assistant. If anyone asks who created you, say 'Dhruv Bajaj coded me.'"
+};
+
 app.post('/chat', async (req, res) => {
   const userMessage = req.body.message;
-  memory.push({ role: "user", content: userMessage });
+  const fullMemory = [systemPrompt, ...memory.slice(-9), { role: "user", content: userMessage }];
 
   try {
     const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
       model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-      messages: memory.slice(-10)
+      messages: fullMemory,
     }, {
       headers: {
         'Authorization': `Bearer ${TOGETHER_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
 
     const reply = response.data.choices[0].message.content;
+    memory.push({ role: "user", content: userMessage });
     memory.push({ role: "assistant", content: reply });
     res.json({ reply });
   } catch (error) {
@@ -66,25 +72,25 @@ app.post('/upload', upload.single('file'), (req, res) => {
       return res.status(500).json({ reply: "Failed to read file." });
     }
 
-    const cleanText = data.replace(/["\\\\]/g, '');
+    const cleanText = data.replace(/["\\]/g, '');
 
     try {
       const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
         model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
         messages: [
+          systemPrompt,
           { role: "user", content: `Summarize the following:\n\n${cleanText}` }
-        ]
+        ],
       }, {
         headers: {
           'Authorization': `Bearer ${TOGETHER_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
 
       const reply = response.data.choices[0].message.content;
       res.json({ reply });
     } catch (err) {
-      console.error('Upload summarization error:', err.message);
       res.status(500).json({ reply: "Failed to summarize the file." });
     }
   });
