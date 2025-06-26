@@ -1,297 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>My AI Assistant</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-    }
-
-    .container {
-      background: white;
-      border-radius: 20px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-      width: 100%;
-      max-width: 800px;
-      overflow: hidden;
-    }
-
-    .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 30px;
-      text-align: center;
-    }
-
-    .header h1 {
-      font-size: 2.5rem;
-      font-weight: 300;
-      margin-bottom: 10px;
-    }
-
-    .header p {
-      opacity: 0.9;
-      font-size: 1.1rem;
-    }
-
-    .chat-container {
-      padding: 30px;
-    }
-
-    #chatbox {
-      height: 400px;
-      overflow-y: auto;
-      border: 2px solid #f0f0f0;
-      border-radius: 15px;
-      padding: 20px;
-      margin-bottom: 20px;
-      background: #fafafa;
-      scroll-behavior: smooth;
-    }
-
-    #chatbox::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    #chatbox::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 10px;
-    }
-
-    #chatbox::-webkit-scrollbar-thumb {
-      background: #c1c1c1;
-      border-radius: 10px;
-    }
-
-    #chatbox::-webkit-scrollbar-thumb:hover {
-      background: #a8a8a8;
-    }
-
-    .message {
-      margin-bottom: 15px;
-      padding: 12px 16px;
-      border-radius: 15px;
-      max-width: 80%;
-      word-wrap: break-word;
-    }
-
-    .user-message {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      margin-left: auto;
-      text-align: right;
-    }
-
-    .assistant-message {
-      background: #e9ecef;
-      color: #333;
-      margin-right: auto;
-    }
-
-    .input-section {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-
-    .input-group {
-      flex: 1;
-      min-width: 200px;
-    }
-
-    input[type="text"], input[type="file"] {
-      width: 100%;
-      padding: 12px 16px;
-      border: 2px solid #e0e0e0;
-      border-radius: 10px;
-      font-size: 16px;
-      transition: border-color 0.3s ease;
-    }
-
-    input[type="text"]:focus, input[type="file"]:focus {
-      outline: none;
-      border-color: #667eea;
-    }
-
-    .btn {
-      padding: 12px 24px;
-      border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-    }
-
-    .btn-secondary {
-      background: #6c757d;
-      color: white;
-    }
-
-    .btn-secondary:hover {
-      background: #5a6268;
-      transform: translateY(-2px);
-    }
-
-    .btn-success {
-      background: #28a745;
-      color: white;
-    }
-
-    .btn-success:hover {
-      background: #218838;
-      transform: translateY(-2px);
-    }
-
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 20px;
-      margin-top: 20px;
-    }
-
-    .feature-card {
-      background: #f8f9fa;
-      padding: 20px;
-      border-radius: 15px;
-      border: 2px solid #e9ecef;
-      transition: all 0.3s ease;
-    }
-
-    .feature-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    }
-
-    .feature-card h3 {
-      color: #667eea;
-      margin-bottom: 10px;
-      font-size: 1.2rem;
-    }
-
-    .feature-card p {
-      color: #6c757d;
-      font-size: 0.9rem;
-      line-height: 1.5;
-    }
-
-    @media (max-width: 768px) {
-      .container {
-        margin: 10px;
-        border-radius: 15px;
-      }
-      
-      .header {
-        padding: 20px;
-      }
-      
-      .header h1 {
-        font-size: 2rem;
-      }
-      
-      .chat-container {
-        padding: 20px;
-      }
-      
-      .input-section {
-        flex-direction: column;
-      }
-      
-      .features-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="container">
+  <div class="container" id="auth-container">
+    <h2>Welcome to My AI Assistant</h2>
+    <div id="auth-forms">
+      <input type="text" id="auth-username" placeholder="Username" />
+      <input type="password" id="auth-password" placeholder="Password" />
+      <button onclick="login()">🔑 Login</button>
+      <button onclick="register()">📝 Sign Up</button>
+    </div>
+    <p id="auth-status" style="color:red;"></p>
+  </div>
+
+  <div class="container" id="app-container" style="display:none;">
     <div class="header">
       <h1>🤖 My AI Assistant</h1>
-      <p>Your intelligent companion for chat, search, and file analysis</p>
+      <p>Ask, search, and upload — powered by Dhruv Bajaj</p>
+      <button onclick="logout()" class="btn-secondary">🔒 Logout</button>
     </div>
-    
+
     <div class="chat-container">
-      <div id="chatbox">
+      <div id="chatbox" class="chatbox">
         <div class="message assistant-message">
-          <strong>AI Assistant:</strong> Hello! I'm here to help you. You can ask me questions, search the web, or upload files for analysis. How can I assist you today?
+          <strong>AI Assistant:</strong> Hello! I'm here to help you. What can I do for you?
         </div>
       </div>
-      
+
       <div class="input-section">
-        <div class="input-group">
-          <input type="text" id="message" placeholder="Ask me anything..." />
-        </div>
-        <button class="btn btn-primary" onclick="sendMessage()">
-          💬 Send
-        </button>
-        <button class="btn btn-secondary" onclick="startVoice()">
-          🎤 Voice
-        </button>
+        <input type="text" id="message" placeholder="Ask me anything..." />
+        <button onclick="sendMessage()">💬 Send</button>
+        <button onclick="startVoice()">🎤 Voice</button>
       </div>
-      
+
       <div class="input-section">
-        <div class="input-group">
-          <input type="text" id="searchQuery" placeholder="Search the web..." />
-        </div>
-        <button class="btn btn-success" onclick="searchWeb()">
-          🔍 Search
-        </button>
+        <input type="text" id="searchQuery" placeholder="Search the web..." />
+        <button onclick="searchWeb()">🔍 Search</button>
       </div>
-      
+
       <div class="input-section">
-        <div class="input-group">
-          <input type="file" id="fileInput" />
-        </div>
-        <button class="btn btn-primary" onclick="uploadFile()">
-          📁 Upload & Analyze
-        </button>
-      </div>
-      
-      <div class="features-grid">
-        <div class="feature-card">
-          <h3>💬 Smart Chat</h3>
-          <p>Ask questions and get intelligent responses powered by advanced AI technology.</p>
-        </div>
-        <div class="feature-card">
-          <h3>🔍 Web Search</h3>
-          <p>Search the internet for real-time information and current events.</p>
-        </div>
-        <div class="feature-card">
-          <h3>📁 File Analysis</h3>
-          <p>Upload documents and get instant summaries and insights.</p>
-        </div>
-        <div class="feature-card">
-          <h3>🎤 Voice Input</h3>
-          <p>Use voice commands for hands-free interaction with the assistant.</p>
-        </div>
+        <input type="file" id="fileInput" />
+        <button onclick="uploadFile()">📁 Upload & Analyze</button>
+        <link rel="stylesheet" href="style.css">
       </div>
     </div>
   </div>

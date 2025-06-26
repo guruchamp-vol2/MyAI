@@ -1,221 +1,206 @@
-async function sendMessage() {
-    const input = document.getElementById('message');
-    const chatbox = document.getElementById('chatbox');
-    const message = input.value.trim();
-    if (!message) return;
-  
-    // Add user message with proper styling
-    const userMessageDiv = document.createElement('div');
-    userMessageDiv.className = 'message user-message';
-    userMessageDiv.innerHTML = `<strong>You:</strong> ${message}`;
-    chatbox.appendChild(userMessageDiv);
-  
-    input.value = '';
-    chatbox.scrollTop = chatbox.scrollHeight;
-  
-    // Show loading indicator
-    const loadingDiv = document.createElement('div');
-    loadingDiv.className = 'message assistant-message';
-    loadingDiv.innerHTML = '<strong>AI Assistant:</strong> Thinking...';
-    chatbox.appendChild(loadingDiv);
-    chatbox.scrollTop = chatbox.scrollHeight;
-  
-    try {
-      const res = await fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message })
-      });
-  
-      const data = await res.json();
-      
-      // Remove loading message and add response
-      chatbox.removeChild(loadingDiv);
-      const assistantMessageDiv = document.createElement('div');
-      assistantMessageDiv.className = 'message assistant-message';
-      assistantMessageDiv.innerHTML = `<strong>AI Assistant:</strong> ${data.reply}`;
-      chatbox.appendChild(assistantMessageDiv);
-      chatbox.scrollTop = chatbox.scrollHeight;
-    } catch (error) {
-      // Remove loading message and show error
-      chatbox.removeChild(loadingDiv);
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'message assistant-message';
-      errorDiv.innerHTML = '<strong>Error:</strong> Sorry, something went wrong. Please try again.';
-      chatbox.appendChild(errorDiv);
-      chatbox.scrollTop = chatbox.scrollHeight;
-    }
-  }
-  
-  async function searchWeb() {
-    const input = document.getElementById('searchQuery');
-    const query = input.value.trim();
-    if (!query) return;
-  
-    const chatbox = document.getElementById('chatbox');
-    
-    // Add user search message
-    const userMessageDiv = document.createElement('div');
-    userMessageDiv.className = 'message user-message';
-    userMessageDiv.innerHTML = `<strong>You (search):</strong> ${query}`;
-    chatbox.appendChild(userMessageDiv);
-  
-    input.value = '';
-    chatbox.scrollTop = chatbox.scrollHeight;
-  
-    // Show loading indicator
-    const loadingDiv = document.createElement('div');
-    loadingDiv.className = 'message assistant-message';
-    loadingDiv.innerHTML = '<strong>Searching...</strong> 🔍';
-    chatbox.appendChild(loadingDiv);
-    chatbox.scrollTop = chatbox.scrollHeight;
-  
-    try {
-      const res = await fetch('/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
-      });
-  
-      const data = await res.json();
-      
-      // Remove loading message and add response
-      chatbox.removeChild(loadingDiv);
-      const searchResultDiv = document.createElement('div');
-      searchResultDiv.className = 'message assistant-message';
-      searchResultDiv.innerHTML = `<strong>Search Result:</strong> ${data.reply}`;
-      chatbox.appendChild(searchResultDiv);
-      chatbox.scrollTop = chatbox.scrollHeight;
-    } catch (error) {
-      // Remove loading message and show error
-      chatbox.removeChild(loadingDiv);
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'message assistant-message';
-      errorDiv.innerHTML = '<strong>Error:</strong> Search failed. Please try again.';
-      chatbox.appendChild(errorDiv);
-      chatbox.scrollTop = chatbox.scrollHeight;
-    }
-  }
-  
-  async function uploadFile() {
-    const input = document.getElementById('fileInput');
-    if (!input.files[0]) {
-      alert('Please select a file first.');
-      return;
-    }
-  
-    const formData = new FormData();
-    formData.append('file', input.files[0]);
-  
-    const chatbox = document.getElementById('chatbox');
-    
-    // Add user upload message
-    const userMessageDiv = document.createElement('div');
-    userMessageDiv.className = 'message user-message';
-    userMessageDiv.innerHTML = `<strong>You uploaded:</strong> ${input.files[0].name}`;
-    chatbox.appendChild(userMessageDiv);
-    chatbox.scrollTop = chatbox.scrollHeight;
-  
-    // Show loading indicator
-    const loadingDiv = document.createElement('div');
-    loadingDiv.className = 'message assistant-message';
-    loadingDiv.innerHTML = '<strong>Analyzing file...</strong> 📁';
-    chatbox.appendChild(loadingDiv);
-    chatbox.scrollTop = chatbox.scrollHeight;
-  
-    try {
-      const res = await fetch('/upload', {
-        method: 'POST',
-        body: formData
-      });
-  
-      const data = await res.json();
-      
-      // Remove loading message and add response
-      chatbox.removeChild(loadingDiv);
-      const fileResultDiv = document.createElement('div');
-      fileResultDiv.className = 'message assistant-message';
-      fileResultDiv.innerHTML = `<strong>File Analysis:</strong> ${data.reply}`;
-      chatbox.appendChild(fileResultDiv);
-      chatbox.scrollTop = chatbox.scrollHeight;
-      
-      // Clear file input
-      input.value = '';
-    } catch (error) {
-      // Remove loading message and show error
-      chatbox.removeChild(loadingDiv);
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'message assistant-message';
-      errorDiv.innerHTML = '<strong>Error:</strong> File upload failed. Please try again.';
-      chatbox.appendChild(errorDiv);
-      chatbox.scrollTop = chatbox.scrollHeight;
-    }
-  }
-  
-  function startVoice() {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition is not supported in this browser.');
-      return;
-    }
-  
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-US';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    
-    // Show voice listening indicator
-    const chatbox = document.getElementById('chatbox');
-    const listeningDiv = document.createElement('div');
-    listeningDiv.className = 'message assistant-message';
-    listeningDiv.innerHTML = '<strong>Listening...</strong> 🎤 Speak now';
-    chatbox.appendChild(listeningDiv);
-    chatbox.scrollTop = chatbox.scrollHeight;
-  
-    recognition.start();
-    
-    recognition.onresult = function(event) {
-      const voiceInput = event.results[0][0].transcript;
-      document.getElementById('message').value = voiceInput;
-      
-      // Remove listening indicator
-      chatbox.removeChild(listeningDiv);
-      
-      // Auto-send the message
-      sendMessage();
-    };
-    
-    recognition.onerror = function(event) {
-      chatbox.removeChild(listeningDiv);
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'message assistant-message';
-      errorDiv.innerHTML = '<strong>Voice Error:</strong> Could not recognize speech. Please try again.';
-      chatbox.appendChild(errorDiv);
-      chatbox.scrollTop = chatbox.scrollHeight;
-    };
-    
-    recognition.onend = function() {
-      // Remove listening indicator if it still exists
-      if (chatbox.contains(listeningDiv)) {
-        chatbox.removeChild(listeningDiv);
-      }
-    };
-  }
-  
-  // Add Enter key support for text inputs
-  document.addEventListener('DOMContentLoaded', function() {
-    const messageInput = document.getElementById('message');
-    const searchInput = document.getElementById('searchQuery');
-    
-    messageInput.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        sendMessage();
-      }
-    });
-    
-    searchInput.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        searchWeb();
-      }
-    });
+function showApp() {
+  document.getElementById("auth-container").style.display = "none";
+  document.getElementById("app-container").style.display = "block";
+}
+
+function showLogin() {
+  document.getElementById("auth-container").style.display = "block";
+  document.getElementById("app-container").style.display = "none";
+}
+
+function saveToken(token) {
+  localStorage.setItem("token", token);
+}
+
+function getToken() {
+  return localStorage.getItem("token");
+}
+
+function logout() {
+  localStorage.removeItem("token");
+  showLogin();
+}
+
+async function login() {
+  const username = document.getElementById("auth-username").value;
+  const password = document.getElementById("auth-password").value;
+
+  const res = await fetch("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
   });
-  
+
+  const data = await res.json();
+  if (data.token) {
+    saveToken(data.token);
+    showApp();
+  } else {
+    document.getElementById("auth-status").textContent = data.error || "Login failed";
+  }
+}
+
+async function register() {
+  const username = document.getElementById("auth-username").value;
+  const password = document.getElementById("auth-password").value;
+
+  const res = await fetch("/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+
+  const data = await res.json();
+  if (data.message) {
+    login(); // auto-login
+  } else {
+    document.getElementById("auth-status").textContent = data.error || "Signup failed";
+  }
+}
+
+async function sendMessage() {
+  const input = document.getElementById('message');
+  const chatbox = document.getElementById('chatbox');
+  const message = input.value.trim();
+  if (!message) return;
+
+  chatbox.innerHTML += `<div class="message user-message"><strong>You:</strong> ${message}</div>`;
+  input.value = '';
+  chatbox.scrollTop = chatbox.scrollHeight;
+
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'message assistant-message';
+  loadingDiv.innerHTML = '<strong>AI Assistant:</strong> Thinking...';
+  chatbox.appendChild(loadingDiv);
+
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ message })
+    });
+
+    const data = await res.json();
+    chatbox.removeChild(loadingDiv);
+    chatbox.innerHTML += `<div class="message assistant-message"><strong>AI Assistant:</strong> ${data.reply}</div>`;
+    chatbox.scrollTop = chatbox.scrollHeight;
+  } catch {
+    chatbox.removeChild(loadingDiv);
+    chatbox.innerHTML += `<div class="message assistant-message"><strong>Error:</strong> Sorry, something went wrong.</div>`;
+  }
+}
+
+async function searchWeb() {
+  const input = document.getElementById('searchQuery');
+  const query = input.value.trim();
+  if (!query) return;
+
+  const chatbox = document.getElementById('chatbox');
+  chatbox.innerHTML += `<div class="message user-message"><strong>You (search):</strong> ${query}</div>`;
+  input.value = '';
+
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'message assistant-message';
+  loadingDiv.innerHTML = '<strong>Searching...</strong> 🔍';
+  chatbox.appendChild(loadingDiv);
+
+  try {
+    const res = await fetch('/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ query })
+    });
+
+    const data = await res.json();
+    chatbox.removeChild(loadingDiv);
+    chatbox.innerHTML += `<div class="message assistant-message"><strong>Search Result:</strong> ${data.reply}</div>`;
+    chatbox.scrollTop = chatbox.scrollHeight;
+  } catch {
+    chatbox.removeChild(loadingDiv);
+    chatbox.innerHTML += `<div class="message assistant-message"><strong>Error:</strong> Search failed.</div>`;
+  }
+}
+
+async function uploadFile() {
+  const input = document.getElementById('fileInput');
+  if (!input.files[0]) {
+    alert('Please select a file first.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', input.files[0]);
+
+  const chatbox = document.getElementById('chatbox');
+  chatbox.innerHTML += `<div class="message user-message"><strong>You uploaded:</strong> ${input.files[0].name}</div>`;
+
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'message assistant-message';
+  loadingDiv.innerHTML = '<strong>Analyzing file...</strong> 📁';
+  chatbox.appendChild(loadingDiv);
+
+  try {
+    const res = await fetch('/upload', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+      body: formData
+    });
+
+    const data = await res.json();
+    chatbox.removeChild(loadingDiv);
+    chatbox.innerHTML += `<div class="message assistant-message"><strong>File Analysis:</strong> ${data.reply}</div>`;
+    input.value = '';
+  } catch {
+    chatbox.removeChild(loadingDiv);
+    chatbox.innerHTML += `<div class="message assistant-message"><strong>Error:</strong> File upload failed.</div>`;
+  }
+}
+
+function startVoice() {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    alert('Speech recognition not supported.');
+    return;
+  }
+
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  const chatbox = document.getElementById('chatbox');
+  const listeningDiv = document.createElement('div');
+  listeningDiv.className = 'message assistant-message';
+  listeningDiv.innerHTML = '<strong>Listening...</strong> 🎤 Speak now';
+  chatbox.appendChild(listeningDiv);
+
+  recognition.start();
+
+  recognition.onresult = (event) => {
+    document.getElementById('message').value = event.results[0][0].transcript;
+    chatbox.removeChild(listeningDiv);
+    sendMessage();
+  };
+
+  recognition.onerror = () => {
+    chatbox.removeChild(listeningDiv);
+    chatbox.innerHTML += `<div class="message assistant-message"><strong>Voice Error:</strong> Could not recognize speech.</div>`;
+  };
+
+  recognition.onend = () => {
+    if (chatbox.contains(listeningDiv)) {
+      chatbox.removeChild(listeningDiv);
+    }
+  };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (getToken()) {
+    showApp();
+  }
+});

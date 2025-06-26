@@ -1,4 +1,3 @@
-
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
@@ -94,7 +93,7 @@ app.post('/chat', auth, async (req, res) => {
   }
 
   memory.history.push({ role: "user", content: userMessage });
-  const context = memory.history.slice(-10); // last 10
+  const context = memory.history.slice(-10);
 
   try {
     const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
@@ -107,7 +106,7 @@ app.post('/chat', auth, async (req, res) => {
       },
     });
 
-    const reply = response.data.choices[0].message.content;
+    const reply = response.data.choices[0]?.message?.content || "No response from AI.";
     memory.history.push({ role: "assistant", content: reply });
     await memory.save();
 
@@ -168,9 +167,10 @@ app.post('/upload', auth, upload.single('file'), (req, res) => {
         },
       });
 
-      const reply = response.data.choices[0].message.content;
+      const reply = response.data.choices[0]?.message?.content || "No summary available.";
       res.json({ reply });
     } catch (err) {
+      console.error('File summary error:', err.response?.data || err.message || err);
       res.status(500).json({ reply: "Failed to summarize the file." });
     }
   });
