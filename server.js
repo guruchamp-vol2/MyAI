@@ -175,7 +175,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ reply: "Uploaded file is empty." });
     }
     if (stats.size > 1024 * 1024) { // 1MB limit for free OCR.space
-      return res.status(400).json({ reply: "File is too large for OCR (max 1MB)." });
+      return res.status(400).json({ reply: "File is too large for this AI (max 1MB)." });
     }
   } catch (e) {
     console.error('File stat/read error:', e);
