@@ -167,6 +167,21 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   // Debug log for file extension and original filename
   console.log('File upload:', { originalname: req.file.originalname, ext });
 
+  // Check file existence and size
+  try {
+    const stats = fs.statSync(filePath);
+    console.log('File stats:', stats);
+    if (stats.size === 0) {
+      return res.status(400).json({ reply: "Uploaded file is empty." });
+    }
+    if (stats.size > 1024 * 1024) { // 1MB limit for free OCR.space
+      return res.status(400).json({ reply: "File is too large for OCR (max 1MB)." });
+    }
+  } catch (e) {
+    console.error('File stat/read error:', e);
+    return res.status(400).json({ reply: "Uploaded file could not be read." });
+  }
+
   async function summarizeText(text, userMessage) {
     let messages = [];
     if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(userMessage)) {
