@@ -208,6 +208,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     if (OCR_SPACE_API_KEY) {
       formData.append('apikey', OCR_SPACE_API_KEY);
     }
+    formData.append('filetype', ext.replace('.', ''));
     try {
       const ocrRes = await axios.post('https://api.ocr.space/parse/image', formData, {
         headers: formData.getHeaders(),
