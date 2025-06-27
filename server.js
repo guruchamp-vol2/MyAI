@@ -16,6 +16,7 @@ const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const xlsx = require('xlsx');
 const pptxParser = require('pptx-parser');
+const pptx2json = require('pptx2json');
 require('dotenv').config();
 
 const app = express();
@@ -273,15 +274,19 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   // --- PPTX files ---
   if (ext === '.pptx') {
     try {
-      pptxParser.parse(filePath, async (err, data) => {
+      pptx2json(filePath, async (err, result) => {
         if (err) {
           console.error('PPTX parse error:', err);
           return res.status(500).json({ reply: "Failed to extract text from PPTX." });
         }
         let text = '';
-        data.slides.forEach(slide => {
-          slide.texts.forEach(t => { text += t.text + '\n'; });
-        });
+        if (result && result.slides) {
+          result.slides.forEach(slide => {
+            if (slide.texts) {
+              slide.texts.forEach(t => { text += t.text + '\n'; });
+            }
+          });
+        }
         const summary = await summarizeText(text, 'summarize');
         return res.json({ reply: summary });
       });
