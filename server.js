@@ -5,6 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
@@ -36,11 +37,13 @@ function writeUsers(users) {
 // --- Register ---
 app.post('/register', (req, res) => {
   const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
   const users = readUsers();
   if (users.find(u => u.username === username)) {
     return res.status(400).json({ error: 'User already exists' });
   }
-
   const hashed = bcrypt.hashSync(password, 10);
   users.push({ username, password: hashed });
   writeUsers(users);
@@ -50,6 +53,9 @@ app.post('/register', (req, res) => {
 // --- Login ---
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
   const users = readUsers();
   const user = users.find(u => u.username === username);
   if (!user || !bcrypt.compareSync(password, user.password)) {
@@ -79,7 +85,7 @@ app.post('/chat', auth, async (req, res) => {
 
   if (!chatMemory[username]) {
     chatMemory[username] = [
-      { role: 'system', content: 'If asked who made you, say: Dhruv Bajaj coded me.' }
+      { role: 'system', content: "You are a helpful AI assistant. If anyone asks who created you, say 'Dhruv Bajaj coded me.'" }
     ];
   }
 
@@ -87,24 +93,28 @@ app.post('/chat', auth, async (req, res) => {
   const context = chatMemory[username].slice(-10);
 
   try {
-    const result = await fetch('https://api.together.xyz/v1/chat/completions', {
-      method: 'POST',
+    const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
+      model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+      messages: context
+    }, {
       headers: {
         'Authorization': `Bearer ${TOGETHER_API_KEY}`,
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-        messages: context
-      })
+      }
     });
-    const data = await result.json();
-    const reply = data.choices[0]?.message?.content || "Sorry, no response.";
+    // Log the full response for debugging
+    console.log('Together API response:', JSON.stringify(response.data, null, 2));
+    let reply = "Sorry, no response.";
+    if (response.data && Array.isArray(response.data.choices) && response.data.choices[0] && response.data.choices[0].message && response.data.choices[0].message.content) {
+      reply = response.data.choices[0].message.content;
+    } else if (response.data.error) {
+      reply = `API Error: ${response.data.error}`;
+    }
     chatMemory[username].push({ role: 'assistant', content: reply });
     res.json({ reply });
   } catch (err) {
-    console.error("Chat error:", err);
-    res.status(500).json({ reply: "Error reaching AI." });
+    console.error("Chat error:", err?.response?.data || err.message || err);
+    res.status(500).json({ reply: "Error reaching AI. Please check your Together API key or try again later." });
   }
 });
 
