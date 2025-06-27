@@ -217,13 +217,23 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
   if ([".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".webp"].includes(ext)) {
     const formData = new FormData();
-    formData.append('file', fs.createReadStream(filePath));
+    // Read file as base64 instead of stream
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64Data = fileBuffer.toString('base64');
+    formData.append('base64Image', `data:image/${ext.replace('.', '')};base64,${base64Data}`);
     formData.append('language', 'eng');
     formData.append('isOverlayRequired', 'false');
     if (OCR_SPACE_API_KEY) {
       formData.append('apikey', OCR_SPACE_API_KEY);
     }
     formData.append('filetype', ext.replace('.', ''));
+    
+    console.log('OCR request params:', {
+      hasApiKey: !!OCR_SPACE_API_KEY,
+      filetype: ext.replace('.', ''),
+      base64Length: base64Data.length
+    });
+    
     try {
       const ocrRes = await axios.post('https://api.ocr.space/parse/image', formData, {
         headers: formData.getHeaders(),
