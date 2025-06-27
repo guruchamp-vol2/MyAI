@@ -15,7 +15,6 @@ const { createCanvas, loadImage } = require('canvas');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const xlsx = require('xlsx');
-const pptxParser = require('pptx-parser');
 const pptx2json = require('pptx2json');
 require('dotenv').config();
 
