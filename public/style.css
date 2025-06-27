@@ -224,4 +224,27 @@
       grid-template-columns: 1fr;
     }
   }
+  #auth-section {
+    max-width: 300px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #f4f4f4;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+  #auth-form input {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0;
+  }
+  #auth-form button, #toggle-auth {
+    padding: 10px;
+    width: 100%;
+    margin-top: 10px;
+  }
+  #auth-status {
+    margin-top: 10px;
+    color: red;
+  }
   

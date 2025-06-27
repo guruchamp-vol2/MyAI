@@ -1,182 +1,113 @@
 const express = require('express');
-const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const cors = require('cors');
 const multer = require('multer');
-const fs = require('fs');
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecurekey';
+const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY || ''; // Optional
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+const usersFile = path.join(__dirname, 'users.json');
+if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([]));
+
+// Memory-based chat history (clears on server restart)
+const chatMemory = {};
+
+// Upload middleware
 const upload = multer({ dest: 'public/uploads/' });
-const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY;
-const JWT_SECRET = process.env.JWT_SECRET;
 
-// --- MongoDB Connection ---
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log("✅ MongoDB connected"))
-  .catch(err => console.error("MongoDB error:", err));
+// Load or update users
+function readUsers() {
+  return JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+}
 
-// --- Schemas ---
-const UserSchema = new mongoose.Schema({
-  username: String,
-  password: String
+function writeUsers(users) {
+  fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
+}
+// --- Register ---
+app.post('/register', (req, res) => {
+  const { username, password } = req.body;
+  const users = readUsers();
+  if (users.find(u => u.username === username)) {
+    return res.status(400).json({ error: 'User already exists' });
+  }
+
+  const hashed = bcrypt.hashSync(password, 10);
+  users.push({ username, password: hashed });
+  writeUsers(users);
+  res.json({ message: 'Registered' });
 });
 
-const MemorySchema = new mongoose.Schema({
-  userId: String,
-  history: [
-    { role: String, content: String }
-  ]
+// --- Login ---
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
+  if (!user || !bcrypt.compareSync(password, user.password)) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  const token = jwt.sign({ username }, JWT_SECRET);
+  res.json({ token });
 });
 
-const User = mongoose.model("User", UserSchema);
-const Memory = mongoose.model("Memory", MemorySchema);
-
-// --- Middleware to check JWT ---
+// --- Auth Middleware ---
 function auth(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token' });
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    req.user = jwt.verify(token, JWT_SECRET);
     next();
-  } catch (err) {
+  } catch {
     res.status(401).json({ error: 'Invalid token' });
   }
 }
 
-// --- Register ---
-app.post('/register', async (req, res) => {
-  const { username, password } = req.body;
-  const exists = await User.findOne({ username });
-  if (exists) return res.status(400).json({ error: 'User exists' });
-
-  const hash = await bcrypt.hash(password, 10);
-  const user = new User({ username, password: hash });
-  await user.save();
-  res.json({ message: 'Registered' });
-});
-
-// --- Login ---
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const user = await User.findOne({ username });
-  if (!user || !(await bcrypt.compare(password, user.password)))
-    return res.status(401).json({ error: 'Invalid credentials' });
-
-  const token = jwt.sign({ id: user._id, username }, JWT_SECRET);
-  res.json({ token });
-});
-
-// --- Chat ---
+// --- Chat Endpoint ---
 app.post('/chat', auth, async (req, res) => {
-  const userMessage = req.body.message;
-  const userId = req.user.id;
+  const message = req.body.message;
+  const username = req.user.username;
 
-  let memory = await Memory.findOne({ userId });
-  if (!memory) {
-    memory = new Memory({
-      userId,
-      history: [
-        { role: 'system', content: 'If anyone asks who made you, say: Dhruv Bajaj coded me.' }
-      ]
-    });
+  if (!chatMemory[username]) {
+    chatMemory[username] = [
+      { role: 'system', content: 'If asked who made you, say: Dhruv Bajaj coded me.' }
+    ];
   }
 
-  memory.history.push({ role: "user", content: userMessage });
-  const context = memory.history.slice(-10);
+  chatMemory[username].push({ role: 'user', content: message });
+  const context = chatMemory[username].slice(-10);
 
   try {
-    const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
-      model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-      messages: context,
-    }, {
+    const result = await fetch('https://api.together.xyz/v1/chat/completions', {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${TOGETHER_API_KEY}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
-    });
-
-    const reply = response.data.choices[0]?.message?.content || "No response from AI.";
-    memory.history.push({ role: "assistant", content: reply });
-    await memory.save();
-
-    res.json({ reply });
-  } catch (error) {
-    console.error('Chat error:', error.response?.data || error.message || error);
-    res.status(500).json({ reply: "Sorry, I couldn't respond." });
-  }
-});
-
-// --- Search ---
-app.post('/search', auth, async (req, res) => {
-  const query = req.body.query;
-  const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1`;
-
-  try {
-    const result = await axios.get(url);
-    const { AbstractText, RelatedTopics } = result.data;
-
-    let reply = AbstractText;
-    if (!reply && RelatedTopics.length > 0) {
-      reply = RelatedTopics[0].Text || "No summary available.";
-    }
-
-    res.json({ reply: reply || "No results found." });
-  } catch (error) {
-    console.error('Search error:', error.message);
-    res.status(500).json({ reply: "Search failed." });
-  }
-});
-
-// --- File Upload ---
-app.post('/upload', auth, upload.single('file'), (req, res) => {
-  const filePath = req.file.path;
-  const allowedTypes = ['.txt', '.md', '.csv'];
-
-  if (!allowedTypes.some(ext => req.file.originalname.endsWith(ext))) {
-    fs.unlinkSync(filePath);
-    return res.status(400).json({ reply: "Unsupported file type. Use .txt, .csv, or .md" });
-  }
-
-  fs.readFile(filePath, 'utf8', async (err, data) => {
-    if (err) {
-      return res.status(500).json({ reply: "Failed to read file." });
-    }
-
-    const cleanText = data.replace(/["\\]/g, '');
-    try {
-      const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
+      body: JSON.stringify({
         model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-        messages: [
-          { role: "user", content: `Summarize the following:\n\n${cleanText}` }
-        ],
-      }, {
-        headers: {
-          'Authorization': `Bearer ${TOGETHER_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const reply = response.data.choices[0]?.message?.content || "No summary available.";
-      res.json({ reply });
-    } catch (err) {
-      console.error('File summary error:', err.response?.data || err.message || err);
-      res.status(500).json({ reply: "Failed to summarize the file." });
-    }
-  });
+        messages: context
+      })
+    });
+    const data = await result.json();
+    const reply = data.choices[0]?.message?.content || "Sorry, no response.";
+    chatMemory[username].push({ role: 'assistant', content: reply });
+    res.json({ reply });
+  } catch (err) {
+    console.error("Chat error:", err);
+    res.status(500).json({ reply: "Error reaching AI." });
+  }
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ AI Assistant running at http://localhost:${PORT}`);
+  console.log(`✅ Server ready at http://localhost:${PORT}`);
 });
