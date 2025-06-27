@@ -62,7 +62,11 @@ function logout() {
 // ========== AI Assistant ==========
 
 async function sendMessage() {
-  if (!isLoggedIn()) return;
+  if (!isLoggedIn() && guestLimitReached()) {
+    setAuthStatus('Please log in to continue chatting.', true);
+    showChatInputs(false);
+    return;
+  }
   const input = document.getElementById('message');
   const chatbox = document.getElementById('chatbox');
   const message = input.value.trim();
@@ -101,6 +105,13 @@ async function sendMessage() {
     assistantMessageDiv.innerHTML = `<strong>AI Assistant:</strong> ${data.reply}`;
     chatbox.appendChild(assistantMessageDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
+    if (!isLoggedIn()) {
+      incrementGuestQuestions();
+      if (guestLimitReached()) {
+        setAuthStatus('Please log in to continue chatting.', true);
+        showChatInputs(false);
+      }
+    }
   } catch (error) {
     chatbox.removeChild(loadingDiv);
     const errorDiv = document.createElement('div');
@@ -309,6 +320,8 @@ async function signup() {
   const data = await res.json();
   if (data.message) {
     setAuthStatus('Signup successful! Please login.');
+    document.getElementById('auth-username').value = '';
+    document.getElementById('auth-password').value = '';
   } else {
     setAuthStatus(data.error || 'Signup failed', true);
   }
@@ -317,5 +330,23 @@ async function signup() {
 document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('login-btn').onclick = login;
   document.getElementById('signup-btn').onclick = signup;
-  showChatInputs(isLoggedIn());
+  showChatInputs(isLoggedIn() || canAskGuest());
 });
+
+// --- Guest Question Limit ---
+function canAskGuest() {
+  if (isLoggedIn()) return true;
+  const count = parseInt(localStorage.getItem('guestQuestions') || '0', 10);
+  return count < 5;
+}
+
+function incrementGuestQuestions() {
+  if (isLoggedIn()) return;
+  let count = parseInt(localStorage.getItem('guestQuestions') || '0', 10);
+  count++;
+  localStorage.setItem('guestQuestions', count);
+}
+
+function guestLimitReached() {
+  return !isLoggedIn() && parseInt(localStorage.getItem('guestQuestions') || '0', 10) >= 5;
+}
