@@ -76,23 +76,24 @@ app.post('/login', (req, res) => {
   res.json({ token });
 });
 
-// --- Auth Middleware ---
-function auth(req, res, next) {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token' });
-
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-}
-
 // --- Chat Endpoint ---
-app.post('/chat', auth, async (req, res) => {
+app.post('/chat', async (req, res) => {
   const message = req.body.message;
-  const username = req.user.username;
+  let username = 'guest';
+  let isGuest = true;
+
+  // Try to get user from token if present
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const user = jwt.verify(token, JWT_SECRET);
+      username = user.username;
+      isGuest = false;
+    } catch {
+      // Invalid token, treat as guest
+    }
+  }
 
   if (!chatMemory[username]) {
     chatMemory[username] = [
@@ -127,6 +128,69 @@ app.post('/chat', auth, async (req, res) => {
     console.error("Chat error:", err?.response?.data || err.message || err);
     res.status(500).json({ reply: "Error reaching AI. Please check your Together API key or try again later." });
   }
+});
+
+// --- Search Endpoint ---
+app.post('/search', async (req, res) => {
+  const query = req.body.query;
+  if (!query) return res.status(400).json({ reply: "No query provided." });
+
+  try {
+    const result = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1`);
+    const { AbstractText, RelatedTopics } = result.data;
+
+    let reply = AbstractText;
+    if (!reply && RelatedTopics && RelatedTopics.length > 0) {
+      reply = RelatedTopics[0].Text || "No summary available.";
+    }
+
+    res.json({ reply: reply || "No results found." });
+  } catch (error) {
+    console.error('Search error:', error.message);
+    res.status(500).json({ reply: "Search failed." });
+  }
+});
+
+// --- File Upload Endpoint ---
+app.post('/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ reply: "No file uploaded." });
+  }
+  const filePath = req.file.path;
+  const allowedTypes = ['.txt', '.md', '.csv'];
+
+  if (!allowedTypes.some(ext => req.file.originalname.endsWith(ext))) {
+    fs.unlinkSync(filePath);
+    return res.status(400).json({ reply: "Unsupported file type. Use .txt, .csv, or .md" });
+  }
+
+  fs.readFile(filePath, 'utf8', async (err, data) => {
+    if (err) {
+      return res.status(500).json({ reply: "Failed to read file." });
+    }
+
+    const cleanText = data.replace(/["\\]/g, '');
+    try {
+      const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
+        model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+        messages: [
+          { role: "system", content: "You are a helpful AI assistant. If anyone asks who created you, say 'Dhruv Bajaj coded me.'" },
+          { role: "user", content: `Summarize the following:\n\n${cleanText}` }
+        ],
+      }, {
+        headers: {
+          'Authorization': `Bearer ${TOGETHER_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const reply = response.data.choices[0]?.message?.content || "No summary available.";
+      res.json({ reply });
+    } catch (err) {
+      console.error('File summary error:', err.response?.data || err.message || err);
+      res.status(500).json({ reply: "Failed to summarize the file." });
+    }
+  });
 });
 
 app.listen(PORT, () => {
