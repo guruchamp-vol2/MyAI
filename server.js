@@ -7,7 +7,6 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const FormData = require('form-data');
-const Database = require('better-sqlite3');
 require('dotenv').config();
 
 const app = express();
@@ -19,25 +18,29 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// --- SQLite Setup ---
-const db = new Database('myai.sqlite');
-db.pragma('journal_mode = WAL');
+const usersFile = path.join(__dirname, 'users.json');
+if (!fs.existsSync(usersFile) || !fs.readFileSync(usersFile, 'utf8').trim()) {
+  fs.writeFileSync(usersFile, JSON.stringify([]));
+}
 
-db.prepare(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL
-)`).run();
-
-db.prepare(`CREATE TABLE IF NOT EXISTS chat_memory (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT NOT NULL,
-  role TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`).run();
+// In-memory chat history (resets on restart)
+const chatMemory = {};
 
 const upload = multer({ dest: 'public/uploads/' });
+
+function readUsers() {
+  try {
+    const data = fs.readFileSync(usersFile, 'utf8');
+    if (!data.trim()) return [];
+    return JSON.parse(data);
+  } catch (e) {
+    fs.writeFileSync(usersFile, JSON.stringify([]));
+    return [];
+  }
+}
+function writeUsers(users) {
+  fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
+}
 
 // --- Register ---
 app.post('/register', (req, res) => {
@@ -45,12 +48,13 @@ app.post('/register', (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required.' });
   }
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (user) {
+  const users = readUsers();
+  if (users.find(u => u.username === username)) {
     return res.status(400).json({ error: 'User already exists' });
   }
   const hashed = bcrypt.hashSync(password, 10);
-  db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run(username, hashed);
+  users.push({ username, password: hashed });
+  writeUsers(users);
   res.json({ message: 'Registered' });
 });
 
@@ -60,7 +64,8 @@ app.post('/login', (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required.' });
   }
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -87,15 +92,16 @@ app.post('/chat', async (req, res) => {
     }
   }
 
-  // Save user message to DB
-  db.prepare('INSERT INTO chat_memory (username, role, content) VALUES (?, ?, ?)').run(username, 'user', message);
+  if (!chatMemory[username]) {
+    chatMemory[username] = [];
+  }
 
-  // Get last 9 messages for context
-  let context = db.prepare('SELECT role, content FROM chat_memory WHERE username = ? ORDER BY id DESC LIMIT 9').all(username).reverse();
-  context = context.filter(m => m && m.content && m.content.trim());
+  // Only add system prompt if user asks who made you
+  let context = chatMemory[username].slice(-9).filter(m => m && m.content && m.content.trim());
   if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(message)) {
     context = [{ role: 'system', content: "If anyone asks who created you, say 'Dhruv Bajaj coded me.'" }, ...context];
   }
+  chatMemory[username].push({ role: 'user', content: message });
   context.push({ role: 'user', content: message });
   context = context.filter(m => m && m.content && m.content.trim());
   if (context.length === 0) {
@@ -118,7 +124,7 @@ app.post('/chat', async (req, res) => {
     } else if (response.data.error) {
       reply = `API Error: ${response.data.error}`;
     }
-    db.prepare('INSERT INTO chat_memory (username, role, content) VALUES (?, ?, ?)').run(username, 'assistant', reply);
+    chatMemory[username].push({ role: 'assistant', content: reply });
     res.json({ reply });
   } catch (err) {
     console.error("Chat error:", err?.response?.data || err.message || err);
@@ -212,7 +218,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     return;
   }
 
-  res.json({ reply: "This file type is not supported for analysis yet." });
+  res.json({ reply: "Sorry, this file type is not supported for analysis. Please upload a text or image file." });
 });
 
 app.listen(PORT, () => {
