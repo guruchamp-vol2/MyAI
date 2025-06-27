@@ -13,6 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecurekey';
 const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY || '';
+const OCR_SPACE_API_KEY = process.env.OCR_SPACE_API_KEY || '';
 
 app.use(cors());
 app.use(express.json());
@@ -199,12 +200,20 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     formData.append('file', fs.createReadStream(filePath));
     formData.append('language', 'eng');
     formData.append('isOverlayRequired', 'false');
+    if (OCR_SPACE_API_KEY) {
+      formData.append('apikey', OCR_SPACE_API_KEY);
+    }
     try {
       const ocrRes = await axios.post('https://api.ocr.space/parse/image', formData, {
         headers: formData.getHeaders(),
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
       });
+      // Log full OCR response for debugging
+      if (!ocrRes.data || ocrRes.data.IsErroredOnProcessing) {
+        console.error('OCR API error:', ocrRes.data);
+        return res.status(500).json({ reply: ocrRes.data?.ErrorMessage?.[0] || ocrRes.data?.ErrorDetails || "Failed to extract text from image (OCR API error)." });
+      }
       const parsed = ocrRes.data.ParsedResults?.[0]?.ParsedText || '';
       if (!parsed.trim()) {
         return res.json({ reply: "No readable text found in the image." });
@@ -213,7 +222,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       res.json({ reply: summary });
     } catch (err) {
       console.error('OCR error:', err.response?.data || err.message || err);
-      res.status(500).json({ reply: "Failed to extract text from image." });
+      res.status(500).json({ reply: "Failed to extract text from image. " + (err.response?.data?.ErrorMessage?.[0] || err.message || '') });
     }
     return;
   }
