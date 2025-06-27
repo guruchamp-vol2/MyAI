@@ -235,11 +235,14 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     });
     
     try {
+      console.log('Sending OCR request...');
       const ocrRes = await axios.post('https://api.ocr.space/parse/image', formData, {
         headers: formData.getHeaders(),
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
+        timeout: 30000, // 30 second timeout
       });
+      console.log('OCR response received:', ocrRes.status);
       // Log full OCR response for debugging
       if (!ocrRes.data || ocrRes.data.IsErroredOnProcessing) {
         console.error('OCR API error:', ocrRes.data);
@@ -252,7 +255,12 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       const summary = await summarizeText(parsed, 'summarize');
       res.json({ reply: summary });
     } catch (err) {
-      console.error('OCR error:', err.response?.data || err.message || err);
+      console.error('OCR error details:', {
+        message: err.message,
+        code: err.code,
+        response: err.response?.data,
+        status: err.response?.status
+      });
       res.status(500).json({ reply: "Failed to extract text from image. " + (err.response?.data?.ErrorMessage?.[0] || err.message || '') });
     }
     return;
