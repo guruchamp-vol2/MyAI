@@ -7,58 +7,50 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const FormData = require('form-data');
+const Database = require('better-sqlite3');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecurekey';
-const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY || ''; // Optional
+const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY || '';
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const usersFile = path.join(__dirname, 'users.json');
-// Always initialize users.json if missing or empty
-if (!fs.existsSync(usersFile) || !fs.readFileSync(usersFile, 'utf8').trim()) {
-  fs.writeFileSync(usersFile, JSON.stringify([]));
-}
+// --- SQLite Setup ---
+const db = new Database('myai.sqlite');
+db.pragma('journal_mode = WAL');
 
-// Memory-based chat history (clears on server restart)
-const chatMemory = {};
+db.prepare(`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL
+)`).run();
 
-// Upload middleware
+db.prepare(`CREATE TABLE IF NOT EXISTS chat_memory (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`).run();
+
 const upload = multer({ dest: 'public/uploads/' });
 
-// Load or update users
-function readUsers() {
-  try {
-    const data = fs.readFileSync(usersFile, 'utf8');
-    if (!data.trim()) return [];
-    return JSON.parse(data);
-  } catch (e) {
-    // If file is empty or invalid, reset to empty array
-    writeUsers([]);
-    return [];
-  }
-}
-
-function writeUsers(users) {
-  fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
-}
 // --- Register ---
 app.post('/register', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required.' });
   }
-  const users = readUsers();
-  if (users.find(u => u.username === username)) {
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (user) {
     return res.status(400).json({ error: 'User already exists' });
   }
   const hashed = bcrypt.hashSync(password, 10);
-  users.push({ username, password: hashed });
-  writeUsers(users);
+  db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run(username, hashed);
   res.json({ message: 'Registered' });
 });
 
@@ -68,8 +60,7 @@ app.post('/login', (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required.' });
   }
-  const users = readUsers();
-  const user = users.find(u => u.username === username);
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -96,20 +87,16 @@ app.post('/chat', async (req, res) => {
     }
   }
 
-  if (!chatMemory[username]) {
-    chatMemory[username] = [];
-  }
+  // Save user message to DB
+  db.prepare('INSERT INTO chat_memory (username, role, content) VALUES (?, ?, ?)').run(username, 'user', message);
 
-  // Only add system prompt if user asks who made you
-  let context = chatMemory[username].slice(-9).filter(m => m && m.content && m.content.trim());
+  // Get last 9 messages for context
+  let context = db.prepare('SELECT role, content FROM chat_memory WHERE username = ? ORDER BY id DESC LIMIT 9').all(username).reverse();
+  context = context.filter(m => m && m.content && m.content.trim());
   if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(message)) {
     context = [{ role: 'system', content: "If anyone asks who created you, say 'Dhruv Bajaj coded me.'" }, ...context];
   }
-
-  chatMemory[username].push({ role: 'user', content: message });
   context.push({ role: 'user', content: message });
-
-  // Ensure context is not empty and all messages are valid
   context = context.filter(m => m && m.content && m.content.trim());
   if (context.length === 0) {
     context = [{ role: 'user', content: message }];
@@ -131,7 +118,7 @@ app.post('/chat', async (req, res) => {
     } else if (response.data.error) {
       reply = `API Error: ${response.data.error}`;
     }
-    chatMemory[username].push({ role: 'assistant', content: reply });
+    db.prepare('INSERT INTO chat_memory (username, role, content) VALUES (?, ?, ?)').run(username, 'assistant', reply);
     res.json({ reply });
   } catch (err) {
     console.error("Chat error:", err?.response?.data || err.message || err);
@@ -168,9 +155,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   const filePath = req.file.path;
   const ext = path.extname(req.file.originalname).toLowerCase();
 
-  // Helper to summarize text
   async function summarizeText(text, userMessage) {
-    // Only add system prompt if user asks who made you
     let messages = [];
     if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(userMessage)) {
       messages.push({ role: "system", content: "If anyone asks who created you, say 'Dhruv Bajaj coded me.'" });
@@ -193,7 +178,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     }
   }
 
-  // Handle text-based files
   if ([".txt", ".md", ".csv"].includes(ext)) {
     fs.readFile(filePath, 'utf8', async (err, data) => {
       if (err) return res.status(500).json({ reply: "Failed to read file." });
@@ -204,7 +188,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     return;
   }
 
-  // Handle images (OCR)
   if ([".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".webp"].includes(ext)) {
     const formData = new FormData();
     formData.append('file', fs.createReadStream(filePath));
@@ -229,7 +212,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     return;
   }
 
-  // For other file types, just return a message
   res.json({ reply: "This file type is not supported for analysis yet." });
 });
 
