@@ -309,11 +309,12 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     } catch (err) {
       console.error('Tesseract OCR error:', err);
     }
-    if (!parsed.trim()) {
-      // No text found, try image classification
+    // Stricter check: ignore OCR if only a single char or just digits/punctuation/whitespace
+    const ocrClean = parsed.trim();
+    if (!ocrClean || ocrClean.length < 2 || /^[\d\W_]+$/.test(ocrClean)) {
+      // No valid text found, try image classification
       try {
-        console.log('No text found, running MobileNet classifier...');
-        // Use canvas to decode any image type
+        console.log('No valid text found, running MobileNet classifier...');
         const img = await loadImage(filePath);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -335,7 +336,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         return res.json({ reply: "No readable text found and image classifier failed." });
       }
     }
-    // If text was found, summarize as before
+    // If text was found and passes the check, summarize as before
     console.log('Extracted text length:', parsed.length);
     const summary = await summarizeText(parsed, 'summarize');
     res.json({ reply: summary });
