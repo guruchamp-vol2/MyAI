@@ -323,9 +323,12 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         const predictions = await model.classify(imageTensor);
         if (predictions && predictions.length > 0) {
           const top = predictions[0];
+          if (top.probability < 0.2) {
+            return res.json({ reply: "Sorry, I can't recognize this image. If it's a game character, pixel art, or something unusual, I need a special model trained for that. Try uploading a photo of a real-world object or a document with text." });
+          }
           return res.json({ reply: `No text found. Image classifier thinks this is: ${top.className} (confidence: ${(top.probability*100).toFixed(1)}%)` });
         } else {
-          return res.json({ reply: "No text found and image classifier could not identify the image." });
+          return res.json({ reply: "Sorry, I can't recognize this image. If it's a game character, pixel art, or something unusual, I need a special model trained for that. Try uploading a photo of a real-world object or a document with text." });
         }
       } catch (err) {
         console.error('MobileNet classification error:', err);
