@@ -8,6 +8,9 @@ const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const FormData = require('form-data');
 const Tesseract = require('tesseract.js');
+const tf = require('@tensorflow/tfjs');
+const mobilenet = require('@tensorflow-models/mobilenet');
+const jpeg = require('jpeg-js');
 require('dotenv').config();
 
 const app = express();
@@ -217,30 +220,61 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
   if ([".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".webp"].includes(ext)) {
     console.log('Using Tesseract.js for OCR...');
+    let parsed = '';
     try {
       const result = await Tesseract.recognize(filePath, 'eng', {
         logger: m => console.log('Tesseract progress:', m)
       });
-      
       console.log('Tesseract OCR completed');
-      const parsed = result.data.text || '';
-      
-      if (!parsed.trim()) {
-        return res.json({ reply: "No readable text found in the image." });
-      }
-      
-      console.log('Extracted text length:', parsed.length);
-      const summary = await summarizeText(parsed, 'summarize');
-      res.json({ reply: summary });
+      parsed = result.data.text || '';
     } catch (err) {
       console.error('Tesseract OCR error:', err);
-      res.status(500).json({ reply: "Failed to extract text from image: " + err.message });
     }
+    if (!parsed.trim()) {
+      // No text found, try image classification
+      try {
+        console.log('No text found, running MobileNet classifier...');
+        // Read image as buffer
+        const imageBuffer = fs.readFileSync(filePath);
+        // Decode image to tensor
+        let imageTensor;
+        if (ext === '.jpg' || ext === '.jpeg') {
+          const pixels = jpeg.decode(imageBuffer, true);
+          imageTensor = tf.browser.fromPixels({data: pixels.data, width: pixels.width, height: pixels.height});
+        } else {
+          // For PNG and others, use canvas (not available in Node.js by default), so skip for now
+          return res.json({ reply: "No readable text found in the image. (Image classification only works for JPG/JPEG files in this demo.)" });
+        }
+        const model = await getMobileNetModel();
+        const predictions = await model.classify(imageTensor);
+        if (predictions && predictions.length > 0) {
+          const top = predictions[0];
+          return res.json({ reply: `No text found. Image classifier thinks this is: ${top.className} (confidence: ${(top.probability*100).toFixed(1)}%)` });
+        } else {
+          return res.json({ reply: "No text found and image classifier could not identify the image." });
+        }
+      } catch (err) {
+        console.error('MobileNet classification error:', err);
+        return res.json({ reply: "No readable text found and image classifier failed." });
+      }
+    }
+    // If text was found, summarize as before
+    console.log('Extracted text length:', parsed.length);
+    const summary = await summarizeText(parsed, 'summarize');
+    res.json({ reply: summary });
     return;
   }
 
   res.json({ reply: "Sorry, this file type is not supported for analysis. Please upload a text or image file." });
 });
+
+let mobilenetModel = null;
+async function getMobileNetModel() {
+  if (!mobilenetModel) {
+    mobilenetModel = await mobilenet.load();
+  }
+  return mobilenetModel;
+}
 
 app.listen(PORT, () => {
   console.log(`✅ Server ready at http://localhost:${PORT}`);
