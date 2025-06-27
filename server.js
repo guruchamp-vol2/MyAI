@@ -164,6 +164,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
   const filePath = req.file.path;
   const ext = path.extname(req.file.originalname).toLowerCase();
+  // Debug log for file extension and original filename
+  console.log('File upload:', { originalname: req.file.originalname, ext });
 
   async function summarizeText(text, userMessage) {
     let messages = [];
