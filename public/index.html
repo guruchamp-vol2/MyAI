@@ -3,53 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>My AI Assistant</title>
+  <title>MyAI - Chat Assistant</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Authentication Form -->
-  <div class="container" id="auth-container">
-    <h2>Welcome to My AI Assistant</h2>
-    <div id="auth-forms">
-      <input type="text" id="auth-username" placeholder="Username" />
-      <input type="password" id="auth-password" placeholder="Password" />
-      <button id="auth-submit">🔑 Login</button>
-      <button id="toggle-auth">Switch to Sign Up</button>
-      <p id="auth-status" style="color:red;"></p>
+  <!-- Chat UI (always visible) -->
+  <div class="chat-container" id="chat-section">
+    <div class="chatbox" id="chatbox">
+      <div class="message assistant-message">
+        <strong>AI Assistant:</strong> Hello! I'm here to help. Ask me anything or try uploading a file.
+      </div>
     </div>
+    <input type="text" id="message" placeholder="Type your message..." />
+    <button onclick="sendMessage()">Send</button>
+    <input type="text" id="searchQuery" placeholder="Search the web..." />
+    <button onclick="searchWeb()">Search</button>
+    <input type="file" id="fileInput" />
+    <button onclick="uploadFile()">Upload</button>
+    <button onclick="startVoice()">🎤 Speak</button>
   </div>
 
-  <!-- AI Chat UI -->
-  <div class="container" id="app-container" style="display:none;">
-    <div class="header">
-      <h1>🤖 My AI Assistant</h1>
-      <p>Ask, search, and upload — powered by Dhruv Bajaj</p>
-      <button onclick="logout()" class="btn-secondary">🔒 Logout</button>
-    </div>
+  <div class="feature-section">
+    <h2>Features</h2>
+    <ul>
+      <li>🧠 Memory – AI remembers your chats</li>
+      <li>💻 Code Execution – Evaluates Python/JS in real-time</li>
+      <li>📄 File Upload – Summarize PDFs, CSVs, and text</li>
+      <li>🧾 Citation Fetcher – Finds academic sources</li>
+      <li>🗣️ Voice Input – Talk to your AI</li>
+    </ul>
+  </div>
 
-    <div class="chat-container">
-      <div id="chatbox" class="chatbox">
-        <div class="message assistant-message">
-          <strong>AI Assistant:</strong> Hello! I'm here to help you. What can I do for you?
-        </div>
-      </div>
-
-      <div class="input-section">
-        <input type="text" id="message" placeholder="Ask me anything..." />
-        <button onclick="sendMessage()">💬 Send</button>
-        <button onclick="startVoice()">🎤 Voice</button>
-      </div>
-
-      <div class="input-section">
-        <input type="text" id="searchQuery" placeholder="Search the web..." />
-        <button onclick="searchWeb()">🔍 Search</button>
-      </div>
-
-      <div class="input-section">
-        <input type="file" id="fileInput" />
-        <button onclick="uploadFile()">📁 Upload & Analyze</button>
-      </div>
-    </div>
+  <!-- Login/Signup Form at the bottom -->
+  <div id="auth-section" style="margin-top:40px;">
+    <h2>Login / Sign Up</h2>
+    <input type="text" id="auth-username" placeholder="Username" />
+    <input type="password" id="auth-password" placeholder="Password" />
+    <button id="login-btn">Login</button>
+    <button id="signup-btn">Sign Up</button>
+    <div id="authStatus"></div>
   </div>
 
   <script src="script.js"></script>

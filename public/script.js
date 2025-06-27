@@ -62,6 +62,7 @@ function logout() {
 // ========== AI Assistant ==========
 
 async function sendMessage() {
+  if (!isLoggedIn()) return;
   const input = document.getElementById('message');
   const chatbox = document.getElementById('chatbox');
   const message = input.value.trim();
@@ -71,6 +72,7 @@ async function sendMessage() {
   userMessageDiv.className = 'message user-message';
   userMessageDiv.innerHTML = `<strong>You:</strong> ${message}`;
   chatbox.appendChild(userMessageDiv);
+
   input.value = '';
   chatbox.scrollTop = chatbox.scrollHeight;
 
@@ -80,12 +82,14 @@ async function sendMessage() {
   chatbox.appendChild(loadingDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 
+  const token = localStorage.getItem('token');
+
   try {
     const res = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + localStorage.getItem('token')
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
       body: JSON.stringify({ message })
     });
@@ -242,3 +246,76 @@ function startVoice() {
     }
   };
 }
+
+// --- Auth & UI Logic ---
+function showChat() {
+  document.getElementById('auth-section').style.display = 'none';
+  document.getElementById('chat-section').style.display = '';
+}
+
+function showAuth() {
+  document.getElementById('auth-section').style.display = '';
+  document.getElementById('chat-section').style.display = 'none';
+}
+
+function showChatInputs(enabled) {
+  document.getElementById('message').disabled = !enabled;
+  document.getElementById('searchQuery').disabled = !enabled;
+  document.getElementById('fileInput').disabled = !enabled;
+  document.querySelectorAll('.chat-container button').forEach(btn => btn.disabled = !enabled);
+  if (!enabled) {
+    document.getElementById('message').placeholder = 'Login to chat...';
+  } else {
+    document.getElementById('message').placeholder = 'Type your message...';
+  }
+}
+
+function isLoggedIn() {
+  return !!localStorage.getItem('token');
+}
+
+function setAuthStatus(msg, isError = false) {
+  const el = document.getElementById('authStatus');
+  el.innerText = msg;
+  el.style.color = isError ? 'red' : 'green';
+}
+
+async function login() {
+  const username = document.getElementById('auth-username').value;
+  const password = document.getElementById('auth-password').value;
+  const res = await fetch('/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (data.token) {
+    localStorage.setItem('token', data.token);
+    setAuthStatus('Login successful!');
+    showChatInputs(true);
+  } else {
+    setAuthStatus(data.error || 'Login failed', true);
+  }
+}
+
+async function signup() {
+  const username = document.getElementById('auth-username').value;
+  const password = document.getElementById('auth-password').value;
+  const res = await fetch('/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (data.message) {
+    setAuthStatus('Signup successful! Please login.');
+  } else {
+    setAuthStatus(data.error || 'Signup failed', true);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('login-btn').onclick = login;
+  document.getElementById('signup-btn').onclick = signup;
+  showChatInputs(isLoggedIn());
+});
