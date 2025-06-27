@@ -7,13 +7,13 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const FormData = require('form-data');
+const Tesseract = require('tesseract.js');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecurekey';
 const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY || '';
-const OCR_SPACE_API_KEY = process.env.OCR_SPACE_API_KEY || '';
 
 app.use(cors());
 app.use(express.json());
@@ -216,52 +216,25 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
 
   if ([".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".webp"].includes(ext)) {
-    const formData = new FormData();
-    // Read file as base64 instead of stream
-    const fileBuffer = fs.readFileSync(filePath);
-    const base64Data = fileBuffer.toString('base64');
-    formData.append('base64Image', `data:image/${ext.replace('.', '')};base64,${base64Data}`);
-    formData.append('language', 'eng');
-    formData.append('isOverlayRequired', 'false');
-    if (OCR_SPACE_API_KEY) {
-      formData.append('apikey', OCR_SPACE_API_KEY);
-    }
-    formData.append('filetype', ext.replace('.', ''));
-    
-    console.log('OCR request params:', {
-      hasApiKey: !!OCR_SPACE_API_KEY,
-      filetype: ext.replace('.', ''),
-      base64Length: base64Data.length
-    });
-    
+    console.log('Using Tesseract.js for OCR...');
     try {
-      console.log('Sending OCR request...');
-      const ocrRes = await axios.post('https://api.ocr.space/parse/image', formData, {
-        headers: formData.getHeaders(),
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        timeout: 30000, // 30 second timeout
+      const result = await Tesseract.recognize(filePath, 'eng', {
+        logger: m => console.log('Tesseract progress:', m)
       });
-      console.log('OCR response received:', ocrRes.status);
-      // Log full OCR response for debugging
-      if (!ocrRes.data || ocrRes.data.IsErroredOnProcessing) {
-        console.error('OCR API error:', ocrRes.data);
-        return res.status(500).json({ reply: ocrRes.data?.ErrorMessage?.[0] || ocrRes.data?.ErrorDetails || "Failed to extract text from image (OCR API error)." });
-      }
-      const parsed = ocrRes.data.ParsedResults?.[0]?.ParsedText || '';
+      
+      console.log('Tesseract OCR completed');
+      const parsed = result.data.text || '';
+      
       if (!parsed.trim()) {
         return res.json({ reply: "No readable text found in the image." });
       }
+      
+      console.log('Extracted text length:', parsed.length);
       const summary = await summarizeText(parsed, 'summarize');
       res.json({ reply: summary });
     } catch (err) {
-      console.error('OCR error details:', {
-        message: err.message,
-        code: err.code,
-        response: err.response?.data,
-        status: err.response?.status
-      });
-      res.status(500).json({ reply: "Failed to extract text from image. " + (err.response?.data?.ErrorMessage?.[0] || err.message || '') });
+      console.error('Tesseract OCR error:', err);
+      res.status(500).json({ reply: "Failed to extract text from image: " + err.message });
     }
     return;
   }
