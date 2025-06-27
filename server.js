@@ -11,6 +11,7 @@ const Tesseract = require('tesseract.js');
 const tf = require('@tensorflow/tfjs');
 const mobilenet = require('@tensorflow-models/mobilenet');
 const jpeg = require('jpeg-js');
+const { createCanvas, loadImage } = require('canvas');
 require('dotenv').config();
 
 const app = express();
@@ -234,17 +235,12 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       // No text found, try image classification
       try {
         console.log('No text found, running MobileNet classifier...');
-        // Read image as buffer
-        const imageBuffer = fs.readFileSync(filePath);
-        // Decode image to tensor
-        let imageTensor;
-        if (ext === '.jpg' || ext === '.jpeg') {
-          const pixels = jpeg.decode(imageBuffer, true);
-          imageTensor = tf.browser.fromPixels({data: pixels.data, width: pixels.width, height: pixels.height});
-        } else {
-          // For PNG and others, use canvas (not available in Node.js by default), so skip for now
-          return res.json({ reply: "No readable text found in the image. (Image classification only works for JPG/JPEG files in this demo.)" });
-        }
+        // Use canvas to decode any image type
+        const img = await loadImage(filePath);
+        const canvas = createCanvas(img.width, img.height);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imageTensor = tf.browser.fromPixels(canvas);
         const model = await getMobileNetModel();
         const predictions = await model.classify(imageTensor);
         if (predictions && predictions.length > 0) {
