@@ -18,7 +18,10 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const usersFile = path.join(__dirname, 'users.json');
-if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([]));
+// Always initialize users.json if missing or empty
+if (!fs.existsSync(usersFile) || !fs.readFileSync(usersFile, 'utf8').trim()) {
+  fs.writeFileSync(usersFile, JSON.stringify([]));
+}
 
 // Memory-based chat history (clears on server restart)
 const chatMemory = {};
@@ -28,7 +31,15 @@ const upload = multer({ dest: 'public/uploads/' });
 
 // Load or update users
 function readUsers() {
-  return JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+  try {
+    const data = fs.readFileSync(usersFile, 'utf8');
+    if (!data.trim()) return [];
+    return JSON.parse(data);
+  } catch (e) {
+    // If file is empty or invalid, reset to empty array
+    writeUsers([]);
+    return [];
+  }
 }
 
 function writeUsers(users) {
