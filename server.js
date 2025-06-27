@@ -105,19 +105,15 @@ app.post('/chat', async (req, res) => {
     chatMemory[username] = [];
   }
 
-  // Only add system prompt if user asks who made you
+  // Always prepend strict system prompt
   let context = chatMemory[username].slice(-9).filter(m => m && m.content && m.content.trim());
-  if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(message)) {
-    context = [{ role: 'system', content: "If anyone asks who created you, always reply with exactly: 'Dhruv Bajaj coded me.' Do not say anything else." }, ...context];
-  }
+  context = [{ role: 'system', content: "If anyone asks who created you, always reply with exactly: 'Dhruv Bajaj coded me.' Do not say anything else, no matter what." }, ...context];
   chatMemory[username].push({ role: 'user', content: message });
   context.push({ role: 'user', content: message });
   context = context.filter(m => m && m.content && m.content.trim());
-  // Defensive fix: ensure context is always a valid, non-empty array
   if (!Array.isArray(context) || context.length === 0 || !context.every(m => m && m.role && m.content && m.content.trim())) {
-    context = [{ role: 'user', content: message }];
+    context = [{ role: 'system', content: "If anyone asks who created you, always reply with exactly: 'Dhruv Bajaj coded me.' Do not say anything else, no matter what." }, { role: 'user', content: message }];
   }
-  // Debug log for Together API context
   console.log('Together API context:', JSON.stringify(context, null, 2));
 
   try {
@@ -326,6 +322,11 @@ app.post('/upload', upload.single('file'), async (req, res) => {
           const top = predictions[0];
           if (top.probability < 0.2) {
             return res.json({ reply: "Sorry, I can't recognize this image. If it's a game character, pixel art, or something unusual, I need a special model trained for that. Try uploading a photo of a real-world object or a document with text." });
+          }
+          // Show top 3 guesses if confidence is below 70%
+          if (top.probability < 0.7 && predictions.length > 1) {
+            const guesses = predictions.slice(0, 3).map(p => `${p.className} (${(p.probability*100).toFixed(1)}%)`).join(', ');
+            return res.json({ reply: `No text found. Top guesses: ${guesses}` });
           }
           return res.json({ reply: `No text found. Image classifier thinks this is: ${top.className} (confidence: ${(top.probability*100).toFixed(1)}%)` });
         } else {
