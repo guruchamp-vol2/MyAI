@@ -6,6 +6,7 @@ const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
+const FormData = require('form-data');
 require('dotenv').config();
 
 const app = express();
@@ -96,13 +97,23 @@ app.post('/chat', async (req, res) => {
   }
 
   if (!chatMemory[username]) {
-    chatMemory[username] = [
-      { role: 'system', content: "You are a helpful AI assistant. If anyone asks who created you, say 'Dhruv Bajaj coded me.'" }
-    ];
+    chatMemory[username] = [];
+  }
+
+  // Only add system prompt if user asks who made you
+  let context = chatMemory[username].slice(-9).filter(m => m && m.content && m.content.trim());
+  if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(message)) {
+    context = [{ role: 'system', content: "If anyone asks who created you, say 'Dhruv Bajaj coded me.'" }, ...context];
   }
 
   chatMemory[username].push({ role: 'user', content: message });
-  const context = chatMemory[username].slice(-10);
+  context.push({ role: 'user', content: message });
+
+  // Ensure context is not empty and all messages are valid
+  context = context.filter(m => m && m.content && m.content.trim());
+  if (context.length === 0) {
+    context = [{ role: 'user', content: message }];
+  }
 
   try {
     const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
@@ -114,8 +125,6 @@ app.post('/chat', async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
-    // Log the full response for debugging
-    console.log('Together API response:', JSON.stringify(response.data, null, 2));
     let reply = "Sorry, no response.";
     if (response.data && Array.isArray(response.data.choices) && response.data.choices[0] && response.data.choices[0].message && response.data.choices[0].message.content) {
       reply = response.data.choices[0].message.content;
@@ -157,40 +166,71 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     return res.status(400).json({ reply: "No file uploaded." });
   }
   const filePath = req.file.path;
-  const allowedTypes = ['.txt', '.md', '.csv'];
+  const ext = path.extname(req.file.originalname).toLowerCase();
 
-  if (!allowedTypes.some(ext => req.file.originalname.endsWith(ext))) {
-    fs.unlinkSync(filePath);
-    return res.status(400).json({ reply: "Unsupported file type. Use .txt, .csv, or .md" });
-  }
-
-  fs.readFile(filePath, 'utf8', async (err, data) => {
-    if (err) {
-      return res.status(500).json({ reply: "Failed to read file." });
+  // Helper to summarize text
+  async function summarizeText(text, userMessage) {
+    // Only add system prompt if user asks who made you
+    let messages = [];
+    if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(userMessage)) {
+      messages.push({ role: "system", content: "If anyone asks who created you, say 'Dhruv Bajaj coded me.'" });
     }
-
-    const cleanText = data.replace(/["\\]/g, '');
+    messages.push({ role: "user", content: `Summarize the following:\n\n${text}` });
     try {
       const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
         model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-        messages: [
-          { role: "system", content: "You are a helpful AI assistant. If anyone asks who created you, say 'Dhruv Bajaj coded me.'" },
-          { role: "user", content: `Summarize the following:\n\n${cleanText}` }
-        ],
+        messages,
       }, {
         headers: {
           'Authorization': `Bearer ${TOGETHER_API_KEY}`,
           'Content-Type': 'application/json',
         },
       });
-
-      const reply = response.data.choices[0]?.message?.content || "No summary available.";
-      res.json({ reply });
+      return response.data.choices[0]?.message?.content || "No summary available.";
     } catch (err) {
       console.error('File summary error:', err.response?.data || err.message || err);
-      res.status(500).json({ reply: "Failed to summarize the file." });
+      return "Failed to summarize the file.";
     }
-  });
+  }
+
+  // Handle text-based files
+  if ([".txt", ".md", ".csv"].includes(ext)) {
+    fs.readFile(filePath, 'utf8', async (err, data) => {
+      if (err) return res.status(500).json({ reply: "Failed to read file." });
+      const cleanText = data.replace(/["\\]/g, '');
+      const summary = await summarizeText(cleanText, 'summarize');
+      res.json({ reply: summary });
+    });
+    return;
+  }
+
+  // Handle images (OCR)
+  if ([".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".webp"].includes(ext)) {
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(filePath));
+    formData.append('language', 'eng');
+    formData.append('isOverlayRequired', 'false');
+    try {
+      const ocrRes = await axios.post('https://api.ocr.space/parse/image', formData, {
+        headers: formData.getHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+      const parsed = ocrRes.data.ParsedResults?.[0]?.ParsedText || '';
+      if (!parsed.trim()) {
+        return res.json({ reply: "No readable text found in the image." });
+      }
+      const summary = await summarizeText(parsed, 'summarize');
+      res.json({ reply: summary });
+    } catch (err) {
+      console.error('OCR error:', err.response?.data || err.message || err);
+      res.status(500).json({ reply: "Failed to extract text from image." });
+    }
+    return;
+  }
+
+  // For other file types, just return a message
+  res.json({ reply: "This file type is not supported for analysis yet." });
 });
 
 app.listen(PORT, () => {
