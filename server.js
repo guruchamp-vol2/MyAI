@@ -100,14 +100,17 @@ app.post('/chat', async (req, res) => {
   // Only add system prompt if user asks who made you
   let context = chatMemory[username].slice(-9).filter(m => m && m.content && m.content.trim());
   if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(message)) {
-    context = [{ role: 'system', content: "If anyone asks who created you, say 'Dhruv Bajaj coded me.'" }, ...context];
+    context = [{ role: 'system', content: "If anyone asks who created you, always reply with exactly: 'Dhruv Bajaj coded me.' Do not say anything else." }, ...context];
   }
   chatMemory[username].push({ role: 'user', content: message });
   context.push({ role: 'user', content: message });
   context = context.filter(m => m && m.content && m.content.trim());
-  if (context.length === 0) {
+  // Defensive fix: ensure context is always a valid, non-empty array
+  if (!Array.isArray(context) || context.length === 0 || !context.every(m => m && m.role && m.content && m.content.trim())) {
     context = [{ role: 'user', content: message }];
   }
+  // Debug log for Together API context
+  console.log('Together API context:', JSON.stringify(context, null, 2));
 
   try {
     const response = await axios.post('https://api.together.xyz/v1/chat/completions', {
@@ -165,7 +168,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   async function summarizeText(text, userMessage) {
     let messages = [];
     if (/who (made|created|coded|built) you|who is your creator|who is your author/i.test(userMessage)) {
-      messages.push({ role: "system", content: "If anyone asks who created you, say 'Dhruv Bajaj coded me.'" });
+      messages.push({ role: "system", content: "If anyone asks who created you, always reply with exactly: 'Dhruv Bajaj coded me.' Do not say anything else." });
     }
     messages.push({ role: "user", content: `Summarize the following:\n\n${text}` });
     try {
