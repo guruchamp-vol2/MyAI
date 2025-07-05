@@ -138,13 +138,6 @@ async function sendMessage() {
   }
 }
 
-// XSS Protection: Escape HTML to prevent script injection
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 // Search history and suggestions
 let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
 let searchSuggestions = [];
@@ -466,7 +459,7 @@ function showSearchHistory() {
   }
   
   // Clear existing content
-  historyDiv.innerHTML = '';
+  historyDiv.textContent = '';
   
   // Create header
   const header = document.createElement('div');
@@ -772,7 +765,7 @@ async function loadTrendingSearches() {
     console.log('Trending data:', data);
     
     // Clear existing content
-    trendingContainer.innerHTML = '';
+    trendingContainer.textContent = '';
     
     if (data.popular && data.popular.length > 0) {
       data.popular.forEach(item => {
@@ -800,7 +793,7 @@ async function loadTrendingSearches() {
     console.error('Failed to load trending searches:', error);
     const trendingContainer = document.getElementById('trending-searches');
     if (trendingContainer) {
-      trendingContainer.innerHTML = '';
+      trendingContainer.textContent = '';
       const errorPlaceholder = document.createElement('div');
       errorPlaceholder.className = 'trending-placeholder';
       errorPlaceholder.innerText = 'Unable to load trending searches';
@@ -993,5 +986,37 @@ function showInstallSuccess() {
   successContainer.appendChild(list);
   successDiv.appendChild(successContainer);
   chatbox.appendChild(successDiv);
+  chatbox.scrollTop = chatbox.scrollHeight;
+}
+
+// Listen for service worker update messages and prompt user to reload
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data && event.data.type === 'NEW_VERSION_AVAILABLE') {
+      // Show a reload prompt to the user
+      showUpdatePrompt();
+    }
+  });
+}
+
+function showUpdatePrompt() {
+  // Only show one prompt at a time
+  if (document.getElementById('update-prompt')) return;
+  const chatbox = document.getElementById('chatbox');
+  const promptDiv = document.createElement('div');
+  promptDiv.id = 'update-prompt';
+  promptDiv.className = 'message assistant-message';
+  promptDiv.style.background = '#fff3cd';
+  promptDiv.style.color = '#856404';
+  promptDiv.style.border = '1px solid #ffeeba';
+  promptDiv.style.borderRadius = '10px';
+  promptDiv.style.padding = '15px';
+  promptDiv.style.margin = '10px 0';
+  promptDiv.innerText = 'A new version of MyAI is available. Click here to update!';
+  promptDiv.style.cursor = 'pointer';
+  promptDiv.onclick = () => {
+    window.location.reload(true);
+  };
+  chatbox.appendChild(promptDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 }

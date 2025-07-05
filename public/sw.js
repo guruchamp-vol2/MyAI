@@ -8,6 +8,7 @@ const urlsToCache = [
 
 // Install event
 self.addEventListener('install', event => {
+  self.skipWaiting(); // Force activate new SW immediately
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
@@ -43,4 +44,11 @@ self.addEventListener('activate', event => {
       );
     })
   );
+  // Notify all clients to reload for update
+  self.clients.claim();
+  self.clients.matchAll({ type: 'window' }).then(clients => {
+    clients.forEach(client => {
+      client.postMessage({ type: 'NEW_VERSION_AVAILABLE' });
+    });
+  });
 }); 
