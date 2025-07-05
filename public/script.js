@@ -291,7 +291,7 @@ function createSearchTooltip(suggestions) {
   
   const closeBtn = document.createElement('button');
   closeBtn.className = 'tooltip-close';
-  closeBtn.innerText = '×';
+  closeBtn.textContent = '×';
   closeBtn.onclick = hideSearchTooltip;
   header.appendChild(closeBtn);
   
@@ -304,7 +304,8 @@ function createSearchTooltip(suggestions) {
   suggestions.forEach(suggestion => {
     const suggestionBtn = document.createElement('button');
     suggestionBtn.className = 'tooltip-suggestion-btn';
-    suggestionBtn.innerText = suggestion; // Always use innerText
+    suggestionBtn.type = 'button';
+    suggestionBtn.textContent = suggestion; // 100% safe, never renders HTML
     suggestionBtn.onclick = () => searchSuggestion(suggestion);
     suggestionsContainer.appendChild(suggestionBtn);
   });
