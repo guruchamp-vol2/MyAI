@@ -36,7 +36,16 @@ if (!fs.existsSync(usersFile) || !fs.readFileSync(usersFile, 'utf8').trim()) {
 const chatMemory = {};
 
 // Search analytics storage
-let searchAnalytics = {};
+let searchAnalytics = {
+  "artificial intelligence": { count: 15, success: 14 },
+  "climate change": { count: 12, success: 11 },
+  "machine learning": { count: 10, success: 9 },
+  "blockchain technology": { count: 8, success: 7 },
+  "quantum computing": { count: 6, success: 5 },
+  "renewable energy": { count: 5, success: 5 },
+  "space exploration": { count: 4, success: 4 },
+  "cryptocurrency": { count: 3, success: 3 }
+};
 
 const upload = multer({ dest: 'public/uploads/' });
 

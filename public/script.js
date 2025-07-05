@@ -475,12 +475,6 @@ async function signup() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('login-btn').onclick = login;
-  document.getElementById('signup-btn').onclick = signup;
-  showChatInputs(isLoggedIn() || canAskGuest());
-});
-
 // --- Guest Question Limit ---
 function canAskGuest() {
   if (isLoggedIn()) return true;
@@ -501,8 +495,28 @@ function guestLimitReached() {
 
 // Initialize enhanced search features when page loads
 document.addEventListener('DOMContentLoaded', function() {
+  // Setup authentication
+  document.getElementById('login-btn').onclick = login;
+  document.getElementById('signup-btn').onclick = signup;
+  showChatInputs(isLoggedIn() || canAskGuest());
+  
+  // Setup enhanced search features
   setupSearchInput();
   loadTrendingSearches();
+  
+  // Update timestamp
+  updateLastUpdated();
+  
+  // Register service worker for PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('Service Worker registered successfully:', registration);
+      })
+      .catch(error => {
+        console.log('Service Worker registration failed:', error);
+      });
+  }
   
   // Hide search history when clicking outside
   document.addEventListener('click', function(e) {
@@ -512,12 +526,28 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
+function updateLastUpdated() {
+  const now = new Date();
+  const timeString = now.toLocaleString();
+  const lastUpdatedElement = document.getElementById('last-updated');
+  if (lastUpdatedElement) {
+    lastUpdatedElement.textContent = timeString;
+  }
+}
+
 async function loadTrendingSearches() {
   try {
+    console.log('Loading trending searches...');
     const response = await fetch('/popular-searches');
     const data = await response.json();
     
     const trendingContainer = document.getElementById('trending-searches');
+    if (!trendingContainer) {
+      console.error('Trending container not found');
+      return;
+    }
+    
+    console.log('Trending data:', data);
     
     if (data.popular && data.popular.length > 0) {
       trendingContainer.innerHTML = data.popular.map(item => 
@@ -529,9 +559,11 @@ async function loadTrendingSearches() {
       trendingContainer.innerHTML = '<div class="trending-placeholder">No trending searches yet. Be the first to search!</div>';
     }
   } catch (error) {
-    console.log('Failed to load trending searches:', error);
-    document.getElementById('trending-searches').innerHTML = 
-      '<div class="trending-placeholder">Unable to load trending searches</div>';
+    console.error('Failed to load trending searches:', error);
+    const trendingContainer = document.getElementById('trending-searches');
+    if (trendingContainer) {
+      trendingContainer.innerHTML = '<div class="trending-placeholder">Unable to load trending searches</div>';
+    }
   }
 }
 

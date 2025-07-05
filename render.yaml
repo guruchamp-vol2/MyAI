@@ -1,0 +1,30 @@
+services:
+  # Web Service for the main AI application
+  - type: web
+    name: myai-app
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TOGETHER_API_KEY
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true
+
+  # Static Site for the frontend (optional)
+  - type: web
+    name: myai-static
+    env: static
+    buildCommand: echo "Static site ready"
+    staticPublishPath: ./public
+    envVars:
+      - key: NODE_ENV
+        value: production
+    autoDeploy: true 
