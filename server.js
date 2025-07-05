@@ -35,6 +35,9 @@ if (!fs.existsSync(usersFile) || !fs.readFileSync(usersFile, 'utf8').trim()) {
 // In-memory chat history (resets on restart)
 const chatMemory = {};
 
+// Search analytics storage
+let searchAnalytics = {};
+
 const upload = multer({ dest: 'public/uploads/' });
 
 function readUsers() {
@@ -146,25 +149,158 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// --- Search Endpoint ---
+// --- Smart AI Search Endpoint ---
 app.post('/search', async (req, res) => {
   const query = req.body.query;
   if (!query) return res.status(400).json({ reply: "No query provided." });
 
   try {
-    const result = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1`);
-    const { AbstractText, RelatedTopics } = result.data;
-
-    let reply = AbstractText;
-    if (!reply && RelatedTopics && RelatedTopics.length > 0) {
-      reply = RelatedTopics[0].Text || "No summary available.";
+    // First, get search results from multiple sources
+    let searchResults = [];
+    
+    // Try DuckDuckGo first
+    try {
+      const ddgResult = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1`);
+      if (ddgResult.data.AbstractText) {
+        searchResults.push({
+          source: 'DuckDuckGo',
+          content: ddgResult.data.AbstractText,
+          url: ddgResult.data.AbstractURL
+        });
+      }
+      if (ddgResult.data.RelatedTopics && ddgResult.data.RelatedTopics.length > 0) {
+        ddgResult.data.RelatedTopics.slice(0, 3).forEach(topic => {
+          if (topic.Text) {
+            searchResults.push({
+              source: 'DuckDuckGo Related',
+              content: topic.Text,
+              url: topic.FirstURL
+            });
+          }
+        });
+      }
+    } catch (ddgError) {
+      console.log('DuckDuckGo search failed, trying alternatives...');
     }
 
-    res.json({ reply: reply || "No results found." });
+    // Try Wikipedia API for additional context
+    try {
+      const wikiResult = await axios.get(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`);
+      if (wikiResult.data.extract) {
+        searchResults.push({
+          source: 'Wikipedia',
+          content: wikiResult.data.extract,
+          url: wikiResult.data.content_urls?.desktop?.page
+        });
+      }
+    } catch (wikiError) {
+      // Wikipedia search failed, continue with other sources
+    }
+
+    // If no results from APIs, create a fallback response
+    if (searchResults.length === 0) {
+      searchResults.push({
+        source: 'AI Analysis',
+        content: `I couldn't find specific search results for "${query}". Let me provide some general information or suggest related topics.`
+      });
+    }
+
+    // Process search results through AI for better understanding and summarization
+    const searchContext = searchResults.map(result => 
+      `[${result.source}]: ${result.content}`
+    ).join('\n\n');
+
+    const aiPrompt = `You are a smart search assistant. Analyze the following search results for the query "${query}" and provide a comprehensive, well-structured response. 
+
+Search Results:
+${searchContext}
+
+Please provide:
+1. A clear, concise summary of the most relevant information
+2. Key facts and details from the search results
+3. If there are multiple sources, synthesize the information intelligently
+4. If the search results seem incomplete or unclear, acknowledge this and suggest what additional information might be helpful
+5. Format your response in a helpful, conversational way
+
+Query: "${query}"`;
+
+    const aiResponse = await axios.post('https://api.together.xyz/v1/chat/completions', {
+      model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+      messages: [
+        { role: 'system', content: 'You are a helpful search assistant that provides comprehensive, accurate, and well-structured responses based on search results.' },
+        { role: 'user', content: aiPrompt }
+      ],
+      max_tokens: 800,
+      temperature: 0.3
+    }, {
+      headers: {
+        'Authorization': `Bearer ${TOGETHER_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    let reply = "Sorry, I couldn't process the search results.";
+    if (aiResponse.data && Array.isArray(aiResponse.data.choices) && aiResponse.data.choices[0] && aiResponse.data.choices[0].message && aiResponse.data.choices[0].message.content) {
+      reply = aiResponse.data.choices[0].message.content;
+    }
+
+    // Add source attribution if we have multiple sources
+    if (searchResults.length > 1) {
+      const sources = [...new Set(searchResults.map(r => r.source))];
+      reply += `\n\n📚 Sources: ${sources.join(', ')}`;
+    }
+
+    res.json({ reply });
+
   } catch (error) {
-    console.error('Search error:', error.message);
-    res.status(500).json({ reply: "Search failed." });
+    console.error('Smart search error:', error.message);
+    
+    // Fallback to basic search if AI processing fails
+    try {
+      const fallbackResult = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1`);
+      const { AbstractText, RelatedTopics } = fallbackResult.data;
+      
+      let fallbackReply = AbstractText;
+      if (!fallbackReply && RelatedTopics && RelatedTopics.length > 0) {
+        fallbackReply = RelatedTopics[0].Text || "No summary available.";
+      }
+      
+      res.json({ reply: fallbackReply || "No results found." });
+    } catch (fallbackError) {
+      res.status(500).json({ reply: "Search failed. Please try again later." });
+    }
   }
+});
+
+// --- Search Analytics Endpoint ---
+app.post('/search-analytics', (req, res) => {
+  const { query, success } = req.body;
+  
+  if (query) {
+    if (!searchAnalytics[query]) {
+      searchAnalytics[query] = { count: 0, success: 0 };
+    }
+    searchAnalytics[query].count++;
+    if (success) {
+      searchAnalytics[query].success++;
+    }
+  }
+  
+  res.json({ status: 'tracked' });
+});
+
+// --- Get Popular Searches Endpoint ---
+app.get('/popular-searches', (req, res) => {
+  const popular = Object.entries(searchAnalytics)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 10)
+    .map(([query, data]) => ({
+      query,
+      count: data.count,
+      successRate: data.success / data.count
+    }));
+  
+  res.json({ popular });
 });
 
 // Supported text/code extensions

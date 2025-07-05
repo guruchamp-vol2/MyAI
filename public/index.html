@@ -16,8 +16,10 @@
     </div>
     <input type="text" id="message" placeholder="Type your message..." />
     <button onclick="sendMessage()">Send</button>
-    <input type="text" id="searchQuery" placeholder="Search the web..." />
-    <button onclick="searchWeb()">Search</button>
+    <div class="search-input-container">
+      <input type="text" id="searchQuery" placeholder="Search the web with AI..." />
+    </div>
+    <button onclick="searchWeb()">🔍 Smart Search</button>
     <input type="file" id="fileInput" />
     <button onclick="uploadFile()">Upload</button>
     <button onclick="startVoice()">🎤 Speak</button>
@@ -32,6 +34,13 @@
       <li>🧾 Citation Fetcher – Finds academic sources</li>
       <li>🗣️ Voice Input – Talk to your AI</li>
     </ul>
+  </div>
+
+  <div class="trending-section">
+    <h3>🔥 Trending Searches</h3>
+    <div id="trending-searches" class="trending-list">
+      <div class="trending-placeholder">Loading trending searches...</div>
+    </div>
   </div>
 
   <!-- Login/Signup Form at the bottom -->

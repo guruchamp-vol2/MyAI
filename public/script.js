@@ -122,22 +122,33 @@ async function sendMessage() {
   }
 }
 
+// Search history and suggestions
+let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+let searchSuggestions = [];
+
 async function searchWeb() {
   const input = document.getElementById('searchQuery');
   const query = input.value.trim();
   if (!query) return;
 
+  // Add to search history
+  if (!searchHistory.includes(query)) {
+    searchHistory.unshift(query);
+    searchHistory = searchHistory.slice(0, 10); // Keep last 10 searches
+    localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+  }
+
   const chatbox = document.getElementById('chatbox');
   const userMessageDiv = document.createElement('div');
   userMessageDiv.className = 'message user-message';
-  userMessageDiv.innerHTML = `<strong>You (search):</strong> ${query}`;
+  userMessageDiv.innerHTML = `<strong>🔍 Search:</strong> ${query}`;
   chatbox.appendChild(userMessageDiv);
   input.value = '';
   chatbox.scrollTop = chatbox.scrollHeight;
 
   const loadingDiv = document.createElement('div');
   loadingDiv.className = 'message assistant-message';
-  loadingDiv.innerHTML = '<strong>Searching...</strong> 🔍';
+  loadingDiv.innerHTML = '<strong>🤖 AI Search Assistant:</strong> Searching multiple sources and analyzing results...';
   chatbox.appendChild(loadingDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 
@@ -153,19 +164,156 @@ async function searchWeb() {
 
     const data = await res.json();
     chatbox.removeChild(loadingDiv);
+    
     const resultDiv = document.createElement('div');
     resultDiv.className = 'message assistant-message';
-    resultDiv.innerHTML = `<strong>Search Result:</strong> ${data.reply}`;
+    
+    // Format the response with better styling
+    const formattedReply = data.reply
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n/g, '<br>');
+    
+    resultDiv.innerHTML = `<strong>🤖 AI Search Results:</strong><br>${formattedReply}`;
     chatbox.appendChild(resultDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
+
+    // Show search suggestions based on the query
+    showSearchSuggestions(query);
+    
+    // Track successful search
+    trackSearchAnalytics(query, true);
+    
   } catch (error) {
     chatbox.removeChild(loadingDiv);
     const errorDiv = document.createElement('div');
     errorDiv.className = 'message assistant-message';
-    errorDiv.innerHTML = '<strong>Error:</strong> Search failed.';
+    errorDiv.innerHTML = '<strong>❌ Search Error:</strong> Unable to complete search. Please try again or check your connection.';
     chatbox.appendChild(errorDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
+    
+    // Track failed search
+    trackSearchAnalytics(query, false);
   }
+}
+
+async function trackSearchAnalytics(query, success) {
+  try {
+    await fetch('/search-analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, success })
+    });
+  } catch (error) {
+    // Analytics tracking failed, but don't show error to user
+    console.log('Analytics tracking failed:', error);
+  }
+}
+
+function showSearchSuggestions(query) {
+  // Generate related search suggestions
+  const suggestions = generateSearchSuggestions(query);
+  if (suggestions.length > 0) {
+    const chatbox = document.getElementById('chatbox');
+    const suggestionDiv = document.createElement('div');
+    suggestionDiv.className = 'message assistant-message suggestion-box';
+    suggestionDiv.innerHTML = `
+      <strong>💡 Related searches:</strong><br>
+      ${suggestions.map(suggestion => 
+        `<button class="suggestion-btn" onclick="searchSuggestion('${suggestion}')">${suggestion}</button>`
+      ).join(' ')}
+    `;
+    chatbox.appendChild(suggestionDiv);
+    chatbox.scrollTop = chatbox.scrollHeight;
+  }
+}
+
+function generateSearchSuggestions(query) {
+  const suggestions = [];
+  const words = query.toLowerCase().split(' ');
+  
+  // Add variations of the original query
+  if (words.length > 1) {
+    suggestions.push(words.slice(0, -1).join(' '));
+    suggestions.push(words.slice(1).join(' '));
+  }
+  
+  // Add common search modifiers
+  const modifiers = ['latest', 'news', 'guide', 'tutorial', 'examples', 'definition'];
+  modifiers.forEach(modifier => {
+    if (!query.toLowerCase().includes(modifier)) {
+      suggestions.push(`${query} ${modifier}`);
+    }
+  });
+  
+  return suggestions.slice(0, 4); // Limit to 4 suggestions
+}
+
+function searchSuggestion(suggestion) {
+  document.getElementById('searchQuery').value = suggestion;
+  searchWeb();
+}
+
+// Enhanced search input with history dropdown
+function setupSearchInput() {
+  const searchInput = document.getElementById('searchQuery');
+  
+  searchInput.addEventListener('focus', () => {
+    showSearchHistory();
+  });
+  
+  searchInput.addEventListener('input', () => {
+    const query = searchInput.value.trim();
+    if (query.length > 2) {
+      showSearchSuggestions(query);
+    } else {
+      hideSearchSuggestions();
+    }
+  });
+  
+  searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      searchWeb();
+    }
+  });
+}
+
+function showSearchHistory() {
+  if (searchHistory.length === 0) return;
+  
+  let historyDiv = document.getElementById('searchHistoryDropdown');
+  if (!historyDiv) {
+    historyDiv = document.createElement('div');
+    historyDiv.id = 'searchHistoryDropdown';
+    historyDiv.className = 'search-history-dropdown';
+    document.getElementById('searchQuery').parentNode.appendChild(historyDiv);
+  }
+  
+  historyDiv.innerHTML = `
+    <div class="history-header">Recent searches:</div>
+    ${searchHistory.map(item => 
+      `<div class="history-item" onclick="selectHistoryItem('${item}')">${item}</div>`
+    ).join('')}
+    <div class="history-clear" onclick="clearSearchHistory()">Clear history</div>
+  `;
+  historyDiv.style.display = 'block';
+}
+
+function hideSearchSuggestions() {
+  const historyDiv = document.getElementById('searchHistoryDropdown');
+  if (historyDiv) {
+    historyDiv.style.display = 'none';
+  }
+}
+
+function selectHistoryItem(item) {
+  document.getElementById('searchQuery').value = item;
+  hideSearchSuggestions();
+}
+
+function clearSearchHistory() {
+  searchHistory = [];
+  localStorage.removeItem('searchHistory');
+  hideSearchSuggestions();
 }
 
 async function uploadFile() {
@@ -349,4 +497,45 @@ function incrementGuestQuestions() {
 
 function guestLimitReached() {
   return !isLoggedIn() && parseInt(localStorage.getItem('guestQuestions') || '0', 10) >= 5;
+}
+
+// Initialize enhanced search features when page loads
+document.addEventListener('DOMContentLoaded', function() {
+  setupSearchInput();
+  loadTrendingSearches();
+  
+  // Hide search history when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.search-input-container') && !e.target.closest('#searchHistoryDropdown')) {
+      hideSearchSuggestions();
+    }
+  });
+});
+
+async function loadTrendingSearches() {
+  try {
+    const response = await fetch('/popular-searches');
+    const data = await response.json();
+    
+    const trendingContainer = document.getElementById('trending-searches');
+    
+    if (data.popular && data.popular.length > 0) {
+      trendingContainer.innerHTML = data.popular.map(item => 
+        `<button class="trending-item" onclick="searchTrending('${item.query}')">
+          ${item.query}<span class="trending-count">(${item.count})</span>
+        </button>`
+      ).join('');
+    } else {
+      trendingContainer.innerHTML = '<div class="trending-placeholder">No trending searches yet. Be the first to search!</div>';
+    }
+  } catch (error) {
+    console.log('Failed to load trending searches:', error);
+    document.getElementById('trending-searches').innerHTML = 
+      '<div class="trending-placeholder">Unable to load trending searches</div>';
+  }
+}
+
+function searchTrending(query) {
+  document.getElementById('searchQuery').value = query;
+  searchWeb();
 }
