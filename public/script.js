@@ -74,7 +74,11 @@ async function sendMessage() {
 
   const userMessageDiv = document.createElement('div');
   userMessageDiv.className = 'message user-message';
-  userMessageDiv.innerHTML = `<strong>You:</strong> ${escapeHtml(message)}`;
+  const userText = document.createElement('strong');
+  userText.innerText = 'You: ';
+  const userMessage = document.createTextNode(message);
+  userMessageDiv.appendChild(userText);
+  userMessageDiv.appendChild(userMessage);
   chatbox.appendChild(userMessageDiv);
 
   input.value = '';
@@ -82,7 +86,11 @@ async function sendMessage() {
 
   const loadingDiv = document.createElement('div');
   loadingDiv.className = 'message assistant-message';
-  loadingDiv.innerHTML = '<strong>AI Assistant:</strong> Thinking...';
+  const loadingText = document.createElement('strong');
+  loadingText.innerText = 'AI Assistant: ';
+  const loadingMessage = document.createTextNode('Thinking...');
+  loadingDiv.appendChild(loadingText);
+  loadingDiv.appendChild(loadingMessage);
   chatbox.appendChild(loadingDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 
@@ -102,7 +110,11 @@ async function sendMessage() {
     chatbox.removeChild(loadingDiv);
     const assistantMessageDiv = document.createElement('div');
     assistantMessageDiv.className = 'message assistant-message';
-    assistantMessageDiv.innerHTML = `<strong>AI Assistant:</strong> ${escapeHtml(data.reply)}`;
+    const assistantText = document.createElement('strong');
+    assistantText.innerText = 'AI Assistant: ';
+    const assistantMessage = document.createTextNode(data.reply);
+    assistantMessageDiv.appendChild(assistantText);
+    assistantMessageDiv.appendChild(assistantMessage);
     chatbox.appendChild(assistantMessageDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
     if (!isLoggedIn()) {
@@ -116,7 +128,11 @@ async function sendMessage() {
     chatbox.removeChild(loadingDiv);
     const errorDiv = document.createElement('div');
     errorDiv.className = 'message assistant-message';
-    errorDiv.innerHTML = '<strong>Error:</strong> Something went wrong.';
+    const errorText = document.createElement('strong');
+    errorText.innerText = 'Error: ';
+    const errorMessage = document.createTextNode('Something went wrong.');
+    errorDiv.appendChild(errorText);
+    errorDiv.appendChild(errorMessage);
     chatbox.appendChild(errorDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
   }
@@ -132,11 +148,15 @@ function escapeHtml(text) {
 // Search history and suggestions
 let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
 let searchSuggestions = [];
+let searchDebounceTimer = null;
 
 async function searchWeb() {
   const input = document.getElementById('searchQuery');
   const query = input.value.trim();
   if (!query) return;
+
+  // Hide any existing tooltip when searching
+  hideSearchTooltip();
 
   // Add to search history
   if (!searchHistory.includes(query)) {
@@ -148,14 +168,22 @@ async function searchWeb() {
   const chatbox = document.getElementById('chatbox');
   const userMessageDiv = document.createElement('div');
   userMessageDiv.className = 'message user-message';
-  userMessageDiv.innerHTML = `<strong>🔍 Search:</strong> ${escapeHtml(query)}`;
+  const searchText = document.createElement('strong');
+  searchText.innerText = '🔍 Search: ';
+  const searchMessage = document.createTextNode(query);
+  userMessageDiv.appendChild(searchText);
+  userMessageDiv.appendChild(searchMessage);
   chatbox.appendChild(userMessageDiv);
   input.value = '';
   chatbox.scrollTop = chatbox.scrollHeight;
 
   const loadingDiv = document.createElement('div');
   loadingDiv.className = 'message assistant-message';
-  loadingDiv.innerHTML = '<strong>🤖 AI Search Assistant:</strong> Searching multiple sources and analyzing results...';
+  const loadingText = document.createElement('strong');
+  loadingText.innerText = '🤖 AI Search Assistant: ';
+  const loadingMessage = document.createTextNode('Searching multiple sources and analyzing results...');
+  loadingDiv.appendChild(loadingText);
+  loadingDiv.appendChild(loadingMessage);
   chatbox.appendChild(loadingDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 
@@ -175,18 +203,24 @@ async function searchWeb() {
     const resultDiv = document.createElement('div');
     resultDiv.className = 'message assistant-message';
     
-    // Format the response with better styling and XSS protection
-    const formattedReply = escapeHtml(data.reply)
-      .replace(/\n\n/g, '<br><br>')
-      .replace(/\n/g, '<br>');
+    const resultText = document.createElement('strong');
+    resultText.innerText = '🤖 AI Search Results:';
+    resultDiv.appendChild(resultText);
     
-    resultDiv.innerHTML = `<strong>🤖 AI Search Results:</strong><br>${formattedReply}`;
+    // Create line breaks for formatting
+    const lineBreaks = data.reply.split('\n\n');
+    lineBreaks.forEach((paragraph, index) => {
+      if (index > 0) {
+        resultDiv.appendChild(document.createElement('br'));
+        resultDiv.appendChild(document.createElement('br'));
+      }
+      const paragraphText = document.createTextNode(paragraph.replace(/\n/g, ' '));
+      resultDiv.appendChild(paragraphText);
+    });
+    
     chatbox.appendChild(resultDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
 
-    // Show search suggestions based on the query
-    showSearchSuggestions(query);
-    
     // Track successful search
     trackSearchAnalytics(query, true);
     
@@ -194,7 +228,11 @@ async function searchWeb() {
     chatbox.removeChild(loadingDiv);
     const errorDiv = document.createElement('div');
     errorDiv.className = 'message assistant-message';
-    errorDiv.innerHTML = '<strong>❌ Search Error:</strong> Unable to complete search. Please try again or check your connection.';
+    const errorText = document.createElement('strong');
+    errorText.innerText = '❌ Search Error: ';
+    const errorMessage = document.createTextNode('Unable to complete search. Please try again or check your connection.');
+    errorDiv.appendChild(errorText);
+    errorDiv.appendChild(errorMessage);
     chatbox.appendChild(errorDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
     
@@ -217,12 +255,20 @@ async function trackSearchAnalytics(query, success) {
 }
 
 function showSearchSuggestions(query) {
-  // Generate related search suggestions
-  const suggestions = generateSearchSuggestions(query);
-  if (suggestions.length > 0) {
-    // Create hover tooltip instead of chat message
-    createSearchTooltip(suggestions);
+  // Clear existing timer
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
   }
+  
+  // Set new timer - only show suggestions after user stops typing
+  searchDebounceTimer = setTimeout(() => {
+    // Generate related search suggestions
+    const suggestions = generateSearchSuggestions(query);
+    if (suggestions.length > 0) {
+      // Create hover tooltip instead of chat message
+      createSearchTooltip(suggestions);
+    }
+  }, 800); // Wait 800ms after user stops typing
 }
 
 function createSearchTooltip(suggestions) {
@@ -237,14 +283,33 @@ function createSearchTooltip(suggestions) {
   tooltip.id = 'search-tooltip';
   tooltip.className = 'search-tooltip';
   
-  tooltip.innerHTML = `
-    <div class="tooltip-header">💡 Related searches:</div>
-    <div class="tooltip-suggestions">
-      ${suggestions.map(suggestion => 
-        `<button class="tooltip-suggestion-btn" onclick="searchSuggestion('${escapeHtml(suggestion)}')">${escapeHtml(suggestion)}</button>`
-      ).join('')}
-    </div>
-  `;
+  // Create tooltip header
+  const header = document.createElement('div');
+  header.className = 'tooltip-header';
+  const headerText = document.createTextNode('💡 Related searches:');
+  header.appendChild(headerText);
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'tooltip-close';
+  closeBtn.innerText = '×';
+  closeBtn.onclick = hideSearchTooltip;
+  header.appendChild(closeBtn);
+  
+  tooltip.appendChild(header);
+  
+  // Create suggestions container
+  const suggestionsContainer = document.createElement('div');
+  suggestionsContainer.className = 'tooltip-suggestions';
+  
+  suggestions.forEach(suggestion => {
+    const suggestionBtn = document.createElement('button');
+    suggestionBtn.className = 'tooltip-suggestion-btn';
+    suggestionBtn.innerText = suggestion;
+    suggestionBtn.onclick = () => searchSuggestion(suggestion);
+    suggestionsContainer.appendChild(suggestionBtn);
+  });
+  
+  tooltip.appendChild(suggestionsContainer);
   
   // Position tooltip near search input
   const rect = searchInput.getBoundingClientRect();
@@ -255,12 +320,19 @@ function createSearchTooltip(suggestions) {
   
   document.body.appendChild(tooltip);
   
-  // Auto-hide after 5 seconds
+  // Auto-hide after 3 seconds (much shorter)
   setTimeout(() => {
     if (tooltip.parentNode) {
       tooltip.remove();
     }
-  }, 5000);
+  }, 3000);
+  
+  // Also hide when user starts typing again
+  searchInput.addEventListener('input', () => {
+    if (tooltip.parentNode) {
+      tooltip.remove();
+    }
+  }, { once: true });
 }
 
 function hideSearchTooltip() {
@@ -310,12 +382,22 @@ function setupSearchInput() {
     if (query.length > 2) {
       showSearchSuggestions(query);
     } else {
+      // Clear timer and hide tooltip for short queries
+      if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+      }
       hideSearchTooltip();
     }
   });
   
   searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
+      // Clear timer and hide tooltip when searching
+      if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+      }
       hideSearchTooltip();
       searchWeb();
     }
@@ -343,13 +425,31 @@ function showSearchHistory() {
     document.getElementById('searchQuery').parentNode.appendChild(historyDiv);
   }
   
-  historyDiv.innerHTML = `
-    <div class="history-header">Recent searches:</div>
-    ${searchHistory.map(item => 
-      `<div class="history-item" onclick="selectHistoryItem('${item}')">${item}</div>`
-    ).join('')}
-    <div class="history-clear" onclick="clearSearchHistory()">Clear history</div>
-  `;
+  // Clear existing content
+  historyDiv.innerHTML = '';
+  
+  // Create header
+  const header = document.createElement('div');
+  header.className = 'history-header';
+  header.innerText = 'Recent searches:';
+  historyDiv.appendChild(header);
+  
+  // Create history items
+  searchHistory.forEach(item => {
+    const historyItem = document.createElement('div');
+    historyItem.className = 'history-item';
+    historyItem.innerText = item;
+    historyItem.onclick = () => selectHistoryItem(item);
+    historyDiv.appendChild(historyItem);
+  });
+  
+  // Create clear button
+  const clearBtn = document.createElement('div');
+  clearBtn.className = 'history-clear';
+  clearBtn.innerText = 'Clear history';
+  clearBtn.onclick = clearSearchHistory;
+  historyDiv.appendChild(clearBtn);
+  
   historyDiv.style.display = 'block';
 }
 
@@ -384,13 +484,21 @@ async function uploadFile() {
   const chatbox = document.getElementById('chatbox');
   const userMessageDiv = document.createElement('div');
   userMessageDiv.className = 'message user-message';
-  userMessageDiv.innerHTML = `<strong>You uploaded:</strong> ${input.files[0].name}`;
+  const uploadText = document.createElement('strong');
+  uploadText.innerText = 'You uploaded: ';
+  const uploadMessage = document.createTextNode(input.files[0].name);
+  userMessageDiv.appendChild(uploadText);
+  userMessageDiv.appendChild(uploadMessage);
   chatbox.appendChild(userMessageDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 
   const loadingDiv = document.createElement('div');
   loadingDiv.className = 'message assistant-message';
-  loadingDiv.innerHTML = '<strong>Analyzing file...</strong> 📁';
+  const loadingText = document.createElement('strong');
+  loadingText.innerText = 'Analyzing file...';
+  const loadingMessage = document.createTextNode(' 📁');
+  loadingDiv.appendChild(loadingText);
+  loadingDiv.appendChild(loadingMessage);
   chatbox.appendChild(loadingDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 
@@ -405,7 +513,11 @@ async function uploadFile() {
     chatbox.removeChild(loadingDiv);
     const resultDiv = document.createElement('div');
     resultDiv.className = 'message assistant-message';
-    resultDiv.innerHTML = `<strong>File Analysis:</strong> ${data.reply}`;
+    const resultText = document.createElement('strong');
+    resultText.innerText = 'File Analysis: ';
+    const resultMessage = document.createTextNode(data.reply);
+    resultDiv.appendChild(resultText);
+    resultDiv.appendChild(resultMessage);
     chatbox.appendChild(resultDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
     input.value = '';
@@ -413,7 +525,11 @@ async function uploadFile() {
     chatbox.removeChild(loadingDiv);
     const errorDiv = document.createElement('div');
     errorDiv.className = 'message assistant-message';
-    errorDiv.innerHTML = '<strong>Error:</strong> Upload failed.';
+    const errorText = document.createElement('strong');
+    errorText.innerText = 'Error: ';
+    const errorMessage = document.createTextNode('Upload failed.');
+    errorDiv.appendChild(errorText);
+    errorDiv.appendChild(errorMessage);
     chatbox.appendChild(errorDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
   }
@@ -433,7 +549,11 @@ function startVoice() {
   const chatbox = document.getElementById('chatbox');
   const listeningDiv = document.createElement('div');
   listeningDiv.className = 'message assistant-message';
-  listeningDiv.innerHTML = '<strong>Listening...</strong> 🎤 Speak now';
+  const listeningText = document.createElement('strong');
+  listeningText.innerText = 'Listening...';
+  const listeningMessage = document.createTextNode(' 🎤 Speak now');
+  listeningDiv.appendChild(listeningText);
+  listeningDiv.appendChild(listeningMessage);
   chatbox.appendChild(listeningDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 
@@ -450,7 +570,11 @@ function startVoice() {
     chatbox.removeChild(listeningDiv);
     const errorDiv = document.createElement('div');
     errorDiv.className = 'message assistant-message';
-    errorDiv.innerHTML = '<strong>Voice Error:</strong> Could not recognize speech.';
+    const errorText = document.createElement('strong');
+    errorText.innerText = 'Voice Error: ';
+    const errorMessage = document.createTextNode('Could not recognize speech.');
+    errorDiv.appendChild(errorText);
+    errorDiv.appendChild(errorMessage);
     chatbox.appendChild(errorDiv);
   };
 
@@ -607,20 +731,40 @@ async function loadTrendingSearches() {
     
     console.log('Trending data:', data);
     
+    // Clear existing content
+    trendingContainer.innerHTML = '';
+    
     if (data.popular && data.popular.length > 0) {
-      trendingContainer.innerHTML = data.popular.map(item => 
-        `<button class="trending-item" onclick="searchTrending('${item.query}')">
-          ${item.query}<span class="trending-count">(${item.count})</span>
-        </button>`
-      ).join('');
+      data.popular.forEach(item => {
+        const trendingBtn = document.createElement('button');
+        trendingBtn.className = 'trending-item';
+        trendingBtn.onclick = () => searchTrending(item.query);
+        
+        const queryText = document.createTextNode(item.query);
+        trendingBtn.appendChild(queryText);
+        
+        const countSpan = document.createElement('span');
+        countSpan.className = 'trending-count';
+        countSpan.innerText = `(${item.count})`;
+        trendingBtn.appendChild(countSpan);
+        
+        trendingContainer.appendChild(trendingBtn);
+      });
     } else {
-      trendingContainer.innerHTML = '<div class="trending-placeholder">No trending searches yet. Be the first to search!</div>';
+      const placeholder = document.createElement('div');
+      placeholder.className = 'trending-placeholder';
+      placeholder.innerText = 'No trending searches yet. Be the first to search!';
+      trendingContainer.appendChild(placeholder);
     }
   } catch (error) {
     console.error('Failed to load trending searches:', error);
     const trendingContainer = document.getElementById('trending-searches');
     if (trendingContainer) {
-      trendingContainer.innerHTML = '<div class="trending-placeholder">Unable to load trending searches</div>';
+      trendingContainer.innerHTML = '';
+      const errorPlaceholder = document.createElement('div');
+      errorPlaceholder.className = 'trending-placeholder';
+      errorPlaceholder.innerText = 'Unable to load trending searches';
+      trendingContainer.appendChild(errorPlaceholder);
     }
   }
 }
@@ -702,50 +846,77 @@ function showInstallInstructions() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent);
   
-  let instructions = '';
-  
-  if (isIOS) {
-    instructions = `
-      <div style="background: white; padding: 20px; border-radius: 10px; margin: 10px 0;">
-        <h3>📱 Install MyAI on iPhone</h3>
-        <ol>
-          <li>Tap the <strong>Share</strong> button (square with arrow)</li>
-          <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
-          <li>Tap <strong>"Add"</strong></li>
-          <li>Your app will appear on your home screen!</li>
-        </ol>
-      </div>
-    `;
-  } else if (isAndroid) {
-    instructions = `
-      <div style="background: white; padding: 20px; border-radius: 10px; margin: 10px 0;">
-        <h3>📱 Install MyAI on Android</h3>
-        <ol>
-          <li>Tap the <strong>three dots menu</strong> (⋮)</li>
-          <li>Tap <strong>"Add to Home screen"</strong></li>
-          <li>Tap <strong>"Add"</strong></li>
-          <li>Your app will appear on your home screen!</li>
-        </ol>
-      </div>
-    `;
-  } else {
-    instructions = `
-      <div style="background: white; padding: 20px; border-radius: 10px; margin: 10px 0;">
-        <h3>📱 Install MyAI App</h3>
-        <p>To install this app:</p>
-        <ul>
-          <li><strong>Chrome/Edge:</strong> Look for the install icon in the address bar</li>
-          <li><strong>Mobile:</strong> Use the browser's "Add to Home Screen" option</li>
-        </ul>
-      </div>
-    `;
-  }
-  
-  // Add instructions to the page
   const chatbox = document.getElementById('chatbox');
   const instructionDiv = document.createElement('div');
   instructionDiv.className = 'message assistant-message';
-  instructionDiv.innerHTML = instructions;
+  
+  const instructionContainer = document.createElement('div');
+  instructionContainer.style.cssText = 'background: white; padding: 20px; border-radius: 10px; margin: 10px 0;';
+  
+  const title = document.createElement('h3');
+  title.innerText = '📱 Install MyAI App';
+  instructionContainer.appendChild(title);
+  
+  const instructions = document.createElement('div');
+  
+  if (isIOS) {
+    title.innerText = '📱 Install MyAI on iPhone';
+    const list = document.createElement('ol');
+    
+    const steps = [
+      'Tap the Share button (square with arrow)',
+      'Scroll down and tap "Add to Home Screen"',
+      'Tap "Add"',
+      'Your app will appear on your home screen!'
+    ];
+    
+    steps.forEach(stepText => {
+      const li = document.createElement('li');
+      li.innerText = stepText;
+      list.appendChild(li);
+    });
+    
+    instructions.appendChild(list);
+  } else if (isAndroid) {
+    title.innerText = '📱 Install MyAI on Android';
+    const list = document.createElement('ol');
+    
+    const steps = [
+      'Tap the three dots menu (⋮)',
+      'Tap "Add to Home screen"',
+      'Tap "Add"',
+      'Your app will appear on your home screen!'
+    ];
+    
+    steps.forEach(stepText => {
+      const li = document.createElement('li');
+      li.innerText = stepText;
+      list.appendChild(li);
+    });
+    
+    instructions.appendChild(list);
+  } else {
+    const para = document.createElement('p');
+    para.innerText = 'To install this app:';
+    instructions.appendChild(para);
+    
+    const list = document.createElement('ul');
+    const items = [
+      'Chrome/Edge: Look for the install icon in the address bar',
+      'Mobile: Use the browser\'s "Add to Home Screen" option'
+    ];
+    
+    items.forEach(itemText => {
+      const li = document.createElement('li');
+      li.innerText = itemText;
+      list.appendChild(li);
+    });
+    
+    instructions.appendChild(list);
+  }
+  
+  instructionContainer.appendChild(instructions);
+  instructionDiv.appendChild(instructionContainer);
   chatbox.appendChild(instructionDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 }
@@ -754,17 +925,33 @@ function showInstallSuccess() {
   const chatbox = document.getElementById('chatbox');
   const successDiv = document.createElement('div');
   successDiv.className = 'message assistant-message';
-  successDiv.innerHTML = `
-    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 10px; border: 1px solid #c3e6cb;">
-      <h3>🎉 App Installed Successfully!</h3>
-      <p>MyAI is now installed on your device. You can:</p>
-      <ul>
-        <li>Access it from your home screen</li>
-        <li>Use it like a native app</li>
-        <li>Get automatic updates</li>
-      </ul>
-    </div>
-  `;
+  
+  const successContainer = document.createElement('div');
+  successContainer.style.cssText = 'background: #d4edda; color: #155724; padding: 15px; border-radius: 10px; border: 1px solid #c3e6cb;';
+  
+  const title = document.createElement('h3');
+  title.innerText = '🎉 App Installed Successfully!';
+  successContainer.appendChild(title);
+  
+  const para = document.createElement('p');
+  para.innerText = 'MyAI is now installed on your device. You can:';
+  successContainer.appendChild(para);
+  
+  const list = document.createElement('ul');
+  const features = [
+    'Access it from your home screen',
+    'Use it like a native app',
+    'Get automatic updates'
+  ];
+  
+  features.forEach(feature => {
+    const li = document.createElement('li');
+    li.innerText = feature;
+    list.appendChild(li);
+  });
+  
+  successContainer.appendChild(list);
+  successDiv.appendChild(successContainer);
   chatbox.appendChild(successDiv);
   chatbox.scrollTop = chatbox.scrollHeight;
 }
