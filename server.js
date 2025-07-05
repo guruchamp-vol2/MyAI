@@ -17,6 +17,7 @@ const mammoth = require('mammoth');
 const xlsx = require('xlsx');
 const pptx2json = require('pptx2json');
 require('dotenv').config();
+const cron = require('node-cron');
 
 // XSS Protection: Sanitize HTML content
 function sanitizeHtml(text) {
@@ -534,6 +535,23 @@ async function getMobileNetModel() {
   }
   return mobilenetModel;
 }
+
+// Assume trending/popular searches are stored in a variable like this:
+// let popularSearches = {};
+// If not, adjust accordingly.
+
+// Schedule a job to reset trending searches every Monday at 9:00 AM PST
+cron.schedule('0 9 * * 1', () => {
+  // PST is UTC-8 or UTC-7 (with DST). node-cron uses server time, so recommend running server in PST or using a library like moment-timezone for production.
+  if (typeof searchAnalytics === 'object') {
+    for (const key in searchAnalytics) {
+      delete searchAnalytics[key];
+    }
+    console.log('Trending searches reset (Monday 9:00 AM PST)');
+  }
+}, {
+  timezone: 'America/Los_Angeles'
+});
 
 app.listen(PORT, () => {
   console.log(`✅ Server ready at http://localhost:${PORT}`);

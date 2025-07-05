@@ -304,7 +304,7 @@ function createSearchTooltip(suggestions) {
   suggestions.forEach(suggestion => {
     const suggestionBtn = document.createElement('button');
     suggestionBtn.className = 'tooltip-suggestion-btn';
-    suggestionBtn.innerText = suggestion;
+    suggestionBtn.innerText = suggestion; // Always use innerText
     suggestionBtn.onclick = () => searchSuggestion(suggestion);
     suggestionsContainer.appendChild(suggestionBtn);
   });
@@ -319,20 +319,59 @@ function createSearchTooltip(suggestions) {
   tooltip.style.zIndex = '1000';
   
   document.body.appendChild(tooltip);
-  
-  // Auto-hide after 3 seconds (much shorter)
-  setTimeout(() => {
+
+  // Auto-hide after 3 seconds
+  let autoHideTimer = setTimeout(() => {
     if (tooltip.parentNode) {
       tooltip.remove();
     }
   }, 3000);
-  
-  // Also hide when user starts typing again
-  searchInput.addEventListener('input', () => {
+
+  // Failsafe: forcibly remove after 10 seconds
+  let failsafeTimer = setTimeout(() => {
     if (tooltip.parentNode) {
       tooltip.remove();
     }
-  }, { once: true });
+  }, 10000);
+
+  // Hide when user starts typing again
+  const inputListener = () => {
+    if (tooltip.parentNode) {
+      tooltip.remove();
+    }
+    clearTimeout(autoHideTimer);
+    clearTimeout(failsafeTimer);
+    searchInput.removeEventListener('input', inputListener);
+  };
+  searchInput.addEventListener('input', inputListener, { once: true });
+
+  // Hide when pressing Enter
+  const keyListener = (e) => {
+    if (e.key === 'Enter') {
+      if (tooltip.parentNode) {
+        tooltip.remove();
+      }
+      clearTimeout(autoHideTimer);
+      clearTimeout(failsafeTimer);
+      searchInput.removeEventListener('keydown', keyListener);
+    }
+  };
+  searchInput.addEventListener('keydown', keyListener, { once: true });
+
+  // Hide when clicking outside
+  const clickListener = (e) => {
+    if (!e.target.closest('#search-tooltip') && !e.target.closest('.search-input-container')) {
+      if (tooltip.parentNode) {
+        tooltip.remove();
+      }
+      clearTimeout(autoHideTimer);
+      clearTimeout(failsafeTimer);
+      document.removeEventListener('click', clickListener);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener('click', clickListener);
+  }, 0);
 }
 
 function hideSearchTooltip() {
