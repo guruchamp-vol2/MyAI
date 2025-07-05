@@ -74,7 +74,7 @@ async function sendMessage() {
 
   const userMessageDiv = document.createElement('div');
   userMessageDiv.className = 'message user-message';
-  userMessageDiv.innerHTML = `<strong>You:</strong> ${message}`;
+  userMessageDiv.innerHTML = `<strong>You:</strong> ${escapeHtml(message)}`;
   chatbox.appendChild(userMessageDiv);
 
   input.value = '';
@@ -102,7 +102,7 @@ async function sendMessage() {
     chatbox.removeChild(loadingDiv);
     const assistantMessageDiv = document.createElement('div');
     assistantMessageDiv.className = 'message assistant-message';
-    assistantMessageDiv.innerHTML = `<strong>AI Assistant:</strong> ${data.reply}`;
+    assistantMessageDiv.innerHTML = `<strong>AI Assistant:</strong> ${escapeHtml(data.reply)}`;
     chatbox.appendChild(assistantMessageDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
     if (!isLoggedIn()) {
@@ -120,6 +120,13 @@ async function sendMessage() {
     chatbox.appendChild(errorDiv);
     chatbox.scrollTop = chatbox.scrollHeight;
   }
+}
+
+// XSS Protection: Escape HTML to prevent script injection
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // Search history and suggestions
@@ -141,7 +148,7 @@ async function searchWeb() {
   const chatbox = document.getElementById('chatbox');
   const userMessageDiv = document.createElement('div');
   userMessageDiv.className = 'message user-message';
-  userMessageDiv.innerHTML = `<strong>🔍 Search:</strong> ${query}`;
+  userMessageDiv.innerHTML = `<strong>🔍 Search:</strong> ${escapeHtml(query)}`;
   chatbox.appendChild(userMessageDiv);
   input.value = '';
   chatbox.scrollTop = chatbox.scrollHeight;
@@ -168,8 +175,8 @@ async function searchWeb() {
     const resultDiv = document.createElement('div');
     resultDiv.className = 'message assistant-message';
     
-    // Format the response with better styling
-    const formattedReply = data.reply
+    // Format the response with better styling and XSS protection
+    const formattedReply = escapeHtml(data.reply)
       .replace(/\n\n/g, '<br><br>')
       .replace(/\n/g, '<br>');
     
@@ -213,17 +220,53 @@ function showSearchSuggestions(query) {
   // Generate related search suggestions
   const suggestions = generateSearchSuggestions(query);
   if (suggestions.length > 0) {
-    const chatbox = document.getElementById('chatbox');
-    const suggestionDiv = document.createElement('div');
-    suggestionDiv.className = 'message assistant-message suggestion-box';
-    suggestionDiv.innerHTML = `
-      <strong>💡 Related searches:</strong><br>
+    // Create hover tooltip instead of chat message
+    createSearchTooltip(suggestions);
+  }
+}
+
+function createSearchTooltip(suggestions) {
+  // Remove existing tooltip
+  const existingTooltip = document.getElementById('search-tooltip');
+  if (existingTooltip) {
+    existingTooltip.remove();
+  }
+
+  const searchInput = document.getElementById('searchQuery');
+  const tooltip = document.createElement('div');
+  tooltip.id = 'search-tooltip';
+  tooltip.className = 'search-tooltip';
+  
+  tooltip.innerHTML = `
+    <div class="tooltip-header">💡 Related searches:</div>
+    <div class="tooltip-suggestions">
       ${suggestions.map(suggestion => 
-        `<button class="suggestion-btn" onclick="searchSuggestion('${suggestion}')">${suggestion}</button>`
-      ).join(' ')}
-    `;
-    chatbox.appendChild(suggestionDiv);
-    chatbox.scrollTop = chatbox.scrollHeight;
+        `<button class="tooltip-suggestion-btn" onclick="searchSuggestion('${escapeHtml(suggestion)}')">${escapeHtml(suggestion)}</button>`
+      ).join('')}
+    </div>
+  `;
+  
+  // Position tooltip near search input
+  const rect = searchInput.getBoundingClientRect();
+  tooltip.style.position = 'absolute';
+  tooltip.style.top = `${rect.bottom + 5}px`;
+  tooltip.style.left = `${rect.left}px`;
+  tooltip.style.zIndex = '1000';
+  
+  document.body.appendChild(tooltip);
+  
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    if (tooltip.parentNode) {
+      tooltip.remove();
+    }
+  }, 5000);
+}
+
+function hideSearchTooltip() {
+  const tooltip = document.getElementById('search-tooltip');
+  if (tooltip) {
+    tooltip.remove();
   }
 }
 
@@ -250,6 +293,7 @@ function generateSearchSuggestions(query) {
 
 function searchSuggestion(suggestion) {
   document.getElementById('searchQuery').value = suggestion;
+  hideSearchTooltip();
   searchWeb();
 }
 
@@ -266,13 +310,24 @@ function setupSearchInput() {
     if (query.length > 2) {
       showSearchSuggestions(query);
     } else {
-      hideSearchSuggestions();
+      hideSearchTooltip();
     }
   });
   
   searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
+      hideSearchTooltip();
       searchWeb();
+    }
+  });
+  
+  // Hide tooltip when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-input-container') && 
+        !e.target.closest('#searchHistoryDropdown') && 
+        !e.target.closest('#search-tooltip')) {
+      hideSearchTooltip();
+      hideSearchSuggestions();
     }
   });
 }
@@ -507,6 +562,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Update timestamp
   updateLastUpdated();
   
+  // Setup PWA install functionality
+  setupPWAInstall();
+  
   // Register service worker for PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
@@ -570,4 +628,143 @@ async function loadTrendingSearches() {
 function searchTrending(query) {
   document.getElementById('searchQuery').value = query;
   searchWeb();
+}
+
+// PWA Install functionality
+let deferredPrompt;
+
+function setupPWAInstall() {
+  // Listen for the beforeinstallprompt event
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later
+    deferredPrompt = e;
+    // Show the install button
+    showInstallButton();
+  });
+
+  // Listen for successful installation
+  window.addEventListener('appinstalled', (evt) => {
+    console.log('App was installed');
+    hideInstallButton();
+    showInstallSuccess();
+  });
+
+  // Check if app is already installed
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    console.log('App is already installed');
+    hideInstallButton();
+  }
+}
+
+function showInstallButton() {
+  const installContainer = document.getElementById('install-container');
+  const installButton = document.getElementById('install-button');
+  
+  if (installContainer && installButton) {
+    installContainer.style.display = 'block';
+    
+    // Add click handler
+    installButton.onclick = installApp;
+  }
+}
+
+function hideInstallButton() {
+  const installContainer = document.getElementById('install-container');
+  if (installContainer) {
+    installContainer.style.display = 'none';
+  }
+}
+
+function installApp() {
+  if (deferredPrompt) {
+    // Show the install prompt
+    deferredPrompt.prompt();
+    
+    // Wait for the user to respond to the prompt
+    deferredPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        console.log('User accepted the install prompt');
+      } else {
+        console.log('User dismissed the install prompt');
+      }
+      // Clear the deferredPrompt
+      deferredPrompt = null;
+    });
+  } else {
+    // Fallback for browsers that don't support beforeinstallprompt
+    showInstallInstructions();
+  }
+}
+
+function showInstallInstructions() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  
+  let instructions = '';
+  
+  if (isIOS) {
+    instructions = `
+      <div style="background: white; padding: 20px; border-radius: 10px; margin: 10px 0;">
+        <h3>📱 Install MyAI on iPhone</h3>
+        <ol>
+          <li>Tap the <strong>Share</strong> button (square with arrow)</li>
+          <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+          <li>Tap <strong>"Add"</strong></li>
+          <li>Your app will appear on your home screen!</li>
+        </ol>
+      </div>
+    `;
+  } else if (isAndroid) {
+    instructions = `
+      <div style="background: white; padding: 20px; border-radius: 10px; margin: 10px 0;">
+        <h3>📱 Install MyAI on Android</h3>
+        <ol>
+          <li>Tap the <strong>three dots menu</strong> (⋮)</li>
+          <li>Tap <strong>"Add to Home screen"</strong></li>
+          <li>Tap <strong>"Add"</strong></li>
+          <li>Your app will appear on your home screen!</li>
+        </ol>
+      </div>
+    `;
+  } else {
+    instructions = `
+      <div style="background: white; padding: 20px; border-radius: 10px; margin: 10px 0;">
+        <h3>📱 Install MyAI App</h3>
+        <p>To install this app:</p>
+        <ul>
+          <li><strong>Chrome/Edge:</strong> Look for the install icon in the address bar</li>
+          <li><strong>Mobile:</strong> Use the browser's "Add to Home Screen" option</li>
+        </ul>
+      </div>
+    `;
+  }
+  
+  // Add instructions to the page
+  const chatbox = document.getElementById('chatbox');
+  const instructionDiv = document.createElement('div');
+  instructionDiv.className = 'message assistant-message';
+  instructionDiv.innerHTML = instructions;
+  chatbox.appendChild(instructionDiv);
+  chatbox.scrollTop = chatbox.scrollHeight;
+}
+
+function showInstallSuccess() {
+  const chatbox = document.getElementById('chatbox');
+  const successDiv = document.createElement('div');
+  successDiv.className = 'message assistant-message';
+  successDiv.innerHTML = `
+    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 10px; border: 1px solid #c3e6cb;">
+      <h3>🎉 App Installed Successfully!</h3>
+      <p>MyAI is now installed on your device. You can:</p>
+      <ul>
+        <li>Access it from your home screen</li>
+        <li>Use it like a native app</li>
+        <li>Get automatic updates</li>
+      </ul>
+    </div>
+  `;
+  chatbox.appendChild(successDiv);
+  chatbox.scrollTop = chatbox.scrollHeight;
 }

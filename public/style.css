@@ -167,6 +167,48 @@
   }
   
   /* Enhanced Search Styles */
+  .search-tooltip {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    max-width: 300px;
+    min-width: 200px;
+  }
+  
+  .tooltip-header {
+    font-weight: 600;
+    color: #667eea;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  
+  .tooltip-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .tooltip-suggestion-btn {
+    background: #f8f9fa;
+    color: #333;
+    border: 1px solid #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    width: 100%;
+  }
+  
+  .tooltip-suggestion-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+  }
+  
   .suggestion-box {
     background: #f8f9fa !important;
     border-left: 4px solid #667eea;
@@ -307,6 +349,57 @@
     font-size: 12px;
     opacity: 0.8;
     margin-left: 5px;
+  }
+  
+  /* Install App Button Styles */
+  #install-container {
+    text-align: center;
+    margin: 20px 0;
+    padding: 15px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    color: white;
+  }
+  
+  .install-btn {
+    background: white;
+    color: #667eea;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  }
+  
+  .install-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    background: #f8f9fa;
+  }
+  
+  .install-text {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.9;
+  }
+  
+  /* Install button animation */
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+  
+  .install-btn {
+    animation: pulse 2s infinite;
+  }
+  
+  .install-btn:hover {
+    animation: none;
   }
   
   .features-grid {

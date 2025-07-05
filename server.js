@@ -18,6 +18,35 @@ const xlsx = require('xlsx');
 const pptx2json = require('pptx2json');
 require('dotenv').config();
 
+// XSS Protection: Sanitize HTML content
+function sanitizeHtml(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;');
+}
+
+// Input validation middleware
+function validateInput(req, res, next) {
+  if (req.body.message && typeof req.body.message === 'string') {
+    req.body.message = req.body.message.trim();
+    if (req.body.message.length > 1000) {
+      return res.status(400).json({ error: 'Message too long (max 1000 characters)' });
+    }
+  }
+  if (req.body.query && typeof req.body.query === 'string') {
+    req.body.query = req.body.query.trim();
+    if (req.body.query.length > 200) {
+      return res.status(400).json({ error: 'Query too long (max 200 characters)' });
+    }
+  }
+  next();
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecurekey';
@@ -95,7 +124,7 @@ app.post('/login', (req, res) => {
 });
 
 // --- Chat Endpoint ---
-app.post('/chat', async (req, res) => {
+app.post('/chat', validateInput, async (req, res) => {
   const message = req.body.message;
   let username = 'guest';
   let isGuest = true;
@@ -146,9 +175,9 @@ app.post('/chat', async (req, res) => {
     });
     let reply = "Sorry, no response.";
     if (response.data && Array.isArray(response.data.choices) && response.data.choices[0] && response.data.choices[0].message && response.data.choices[0].message.content) {
-      reply = response.data.choices[0].message.content;
+      reply = sanitizeHtml(response.data.choices[0].message.content);
     } else if (response.data.error) {
-      reply = `API Error: ${response.data.error}`;
+      reply = `API Error: ${sanitizeHtml(response.data.error)}`;
     }
     chatMemory[username].push({ role: 'assistant', content: reply });
     res.json({ reply });
@@ -159,7 +188,7 @@ app.post('/chat', async (req, res) => {
 });
 
 // --- Smart AI Search Endpoint ---
-app.post('/search', async (req, res) => {
+app.post('/search', validateInput, async (req, res) => {
   const query = req.body.query;
   if (!query) return res.status(400).json({ reply: "No query provided." });
 
@@ -173,7 +202,7 @@ app.post('/search', async (req, res) => {
       if (ddgResult.data.AbstractText) {
         searchResults.push({
           source: 'DuckDuckGo',
-          content: ddgResult.data.AbstractText,
+          content: sanitizeHtml(ddgResult.data.AbstractText),
           url: ddgResult.data.AbstractURL
         });
       }
@@ -182,7 +211,7 @@ app.post('/search', async (req, res) => {
           if (topic.Text) {
             searchResults.push({
               source: 'DuckDuckGo Related',
-              content: topic.Text,
+              content: sanitizeHtml(topic.Text),
               url: topic.FirstURL
             });
           }
@@ -198,7 +227,7 @@ app.post('/search', async (req, res) => {
       if (wikiResult.data.extract) {
         searchResults.push({
           source: 'Wikipedia',
-          content: wikiResult.data.extract,
+          content: sanitizeHtml(wikiResult.data.extract),
           url: wikiResult.data.content_urls?.desktop?.page
         });
       }
@@ -210,7 +239,7 @@ app.post('/search', async (req, res) => {
     if (searchResults.length === 0) {
       searchResults.push({
         source: 'AI Analysis',
-        content: `I couldn't find specific search results for "${query}". Let me provide some general information or suggest related topics.`
+        content: `I couldn't find specific search results for "${sanitizeHtml(query)}". Let me provide some general information or suggest related topics.`
       });
     }
 
@@ -250,7 +279,7 @@ Query: "${query}"`;
 
     let reply = "Sorry, I couldn't process the search results.";
     if (aiResponse.data && Array.isArray(aiResponse.data.choices) && aiResponse.data.choices[0] && aiResponse.data.choices[0].message && aiResponse.data.choices[0].message.content) {
-      reply = aiResponse.data.choices[0].message.content;
+      reply = sanitizeHtml(aiResponse.data.choices[0].message.content);
     }
 
     // Add source attribution if we have multiple sources
@@ -274,7 +303,7 @@ Query: "${query}"`;
         fallbackReply = RelatedTopics[0].Text || "No summary available.";
       }
       
-      res.json({ reply: fallbackReply || "No results found." });
+      res.json({ reply: sanitizeHtml(fallbackReply || "No results found.") });
     } catch (fallbackError) {
       res.status(500).json({ reply: "Search failed. Please try again later." });
     }
@@ -356,7 +385,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
           'Content-Type': 'application/json',
         },
       });
-      return response.data.choices[0]?.message?.content || "No summary available.";
+      return sanitizeHtml(response.data.choices[0]?.message?.content || "No summary available.");
     } catch (err) {
       console.error('File summary error:', err.response?.data || err.message || err);
       return "Failed to summarize the file.";
